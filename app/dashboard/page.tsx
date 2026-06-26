@@ -16,9 +16,14 @@ interface Employee {
 
 interface Task {
   id: number;
+  title: string;
   employee_id: number;
   status: string;
   due_date: string;
+  client: {
+    id: number;
+    name: string;
+  };
 }
 
 interface PendingCheck {
@@ -299,13 +304,13 @@ export default function TeamWorkloadDashboard() {
                   className="bg-white dark:bg-gray-700 rounded-lg shadow p-4 border-l-4 border-amber-500 hover:shadow-lg transition"
                 >
                   <p className="font-semibold text-gray-900 dark:text-white">
-                    {check.task.title}
+                    {check.task?.title || 'Task'}
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                    {check.task.client.name}
+                    {check.task?.client?.name || 'Client'}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    Worker: {check.task.employee.name}
+                    Worker: {check.task?.employee?.name || 'Worker'}
                   </p>
                 </Link>
               ))}
@@ -335,10 +340,10 @@ export default function TeamWorkloadDashboard() {
                   className="bg-white dark:bg-gray-700 rounded-lg shadow p-4 border-l-4 border-purple-500 hover:shadow-lg transition"
                 >
                   <p className="font-semibold text-gray-900 dark:text-white">
-                    {approval.task.title}
+                    {approval.task?.title || 'Task'}
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                    {approval.task.client.name}
+                    {approval.task?.client?.name || 'Client'}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                     L1 Checker: {approval.checker.name}
