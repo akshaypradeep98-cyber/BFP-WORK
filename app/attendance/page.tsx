@@ -205,7 +205,7 @@ export default function AttendancePage() {
                               Active
                             </span>
                           ) : (
-                            formatTime(record.logout_at)
+                            record.logout_at ? formatTime(record.logout_at) : 'Active'
                           )}
                         </td>
                         <td className="px-6 py-3 text-sm font-mono text-gray-600">
