@@ -299,13 +299,13 @@ export default function TeamWorkloadDashboard() {
                   className="bg-white dark:bg-gray-700 rounded-lg shadow p-4 border-l-4 border-amber-500 hover:shadow-lg transition"
                 >
                   <p className="font-semibold text-gray-900 dark:text-white">
-                    {check.task_title}
+                    {check.task.title}
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                    {check.client_name}
+                    {check.task.client.name}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    Worker: {check.worker_name}
+                    Worker: {check.task.employee.name}
                   </p>
                 </Link>
               ))}
@@ -335,13 +335,13 @@ export default function TeamWorkloadDashboard() {
                   className="bg-white dark:bg-gray-700 rounded-lg shadow p-4 border-l-4 border-purple-500 hover:shadow-lg transition"
                 >
                   <p className="font-semibold text-gray-900 dark:text-white">
-                    {approval.task_title}
+                    {approval.task.title}
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                    {approval.client_name}
+                    {approval.task.client.name}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    L1 Checker: {approval.checker_name}
+                    L1 Checker: {approval.checker.name}
                   </p>
                 </Link>
               ))}
