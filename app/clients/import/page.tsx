@@ -50,7 +50,7 @@ export default function ClientImportPage() {
         const response = await fetch("/api/clients");
         if (response.ok) {
           const data = await response.json();
-          const map = new Map(data.map((c: any) => [c.name.toLowerCase() as string, c]));
+          const map = new Map<string, any>(data.map((c: any) => [c.name.toLowerCase(), c]));
           setExistingClients(map);
         }
       } catch (error) {
