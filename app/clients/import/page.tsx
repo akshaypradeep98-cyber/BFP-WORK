@@ -76,7 +76,7 @@ export default function ClientImportPage() {
         let newCount = 0;
         let existingCount = 0;
 
-        for (const row of data) {
+        for (const row of data as any[]) {
           const clientName = row["Client Name"]?.toString().trim();
           if (!clientName) continue;
 
