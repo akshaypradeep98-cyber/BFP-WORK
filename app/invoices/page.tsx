@@ -106,7 +106,7 @@ export default function InvoicesPage() {
       if (!tasksResponse.ok) throw new Error("Failed to fetch tasks");
       const allTasks = await tasksResponse.json();
       const clientTasks = allTasks.filter(
-        (t: Task) => t.client_id === parseInt(formData.client_id)
+        (t: Task) => (t as any).client_id === parseInt(formData.client_id)
       );
 
       // Fetch payments
