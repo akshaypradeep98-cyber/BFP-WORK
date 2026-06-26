@@ -152,7 +152,7 @@ export default function Level1CheckPage() {
         const verRes = await fetch(`/api/subtask-verifications?task_check_id=${selectedCheckId}`);
         if (verRes.ok) {
           const verData = await verRes.json();
-          const verSet = new Set(verData.map((v: any) => v.subtask_id));
+          const verSet = new Set<number>(verData.map((v: any) => v.subtask_id as number));
           setVerifications(verSet);
         }
 
