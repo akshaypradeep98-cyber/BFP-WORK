@@ -479,7 +479,7 @@ export default function LeaveManagementPage() {
                           {approver?.name || "—"}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
-                          {formatDate(request.updated_at)}
+                          {formatDate((request as any).updated_at)}
                         </td>
                       </tr>
                     );
