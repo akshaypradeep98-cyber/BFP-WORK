@@ -425,7 +425,7 @@ export default function ReportsPage() {
                   clients
                     .filter((c) => tasks.some((t) => t.client_id === c.id))
                     .map((client) => {
-                      const clientTasks = tasks.filter((t) => t.client_id === c.id);
+                      const clientTasks = tasks.filter((t) => t.client_id === client.id);
                       const periodGroups: Record<string, number> = {};
                       const allPeriods: string[] = [];
 
