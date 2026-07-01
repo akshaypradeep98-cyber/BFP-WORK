@@ -1,6 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { verifyPassword } from "@/lib/auth";
+import bcrypt from "bcryptjs";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error("Missing Supabase environment variables");
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,76 +17,46 @@ export async function POST(request: NextRequest) {
 
     if (!username || !password) {
       return NextResponse.json(
-        { error: "Username and password are required" },
+        { error: "Username and password required" },
         { status: 400 }
       );
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const { data, error } = await supabase
+    // Query employee by username
+    const { data: employee, error: queryError } = await supabase
       .from("employees")
-      .select("*")
+      .select("id, name, username, password_hash, classification")
       .eq("username", username)
       .single();
 
-    if (error || !data) {
+    if (queryError || !employee) {
       return NextResponse.json(
-        { error: "Invalid username or password" },
+        { error: "Invalid credentials" },
         { status: 401 }
       );
     }
 
-    const passwordValid = await verifyPassword(password, data.password_hash);
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, employee.password_hash);
 
-    if (!passwordValid) {
+    if (!isValidPassword) {
       return NextResponse.json(
-        { error: "Invalid username or password" },
+        { error: "Invalid credentials" },
         { status: 401 }
       );
     }
 
-    const response = NextResponse.json(
-      {
-        success: true,
-        user: {
-          id: data.id,
-          username: data.username,
-          name: data.name,
-          email: data.email,
-        },
-      },
-      { status: 200 }
-    );
-
-    response.cookies.set("employee_id", data.id.toString(), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
+    // Return employee data (no password hash)
+    return NextResponse.json({
+      employee_id: employee.id,
+      name: employee.name,
+      username: employee.username,
+      classification: employee.classification,
     });
-
-    response.cookies.set("employee_name", data.name, {
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-
-    return response;
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json(
-      { error: "An error occurred during login" },
+      { error: "Login failed" },
       { status: 500 }
     );
   }

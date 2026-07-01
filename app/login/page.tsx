@@ -1,85 +1,125 @@
 ﻿"use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [employeeName, setEmployeeName] = useState("");
-  const [employeeId, setEmployeeId] = useState("1");
+  const router = useRouter();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = async () => {
-    if (!employeeName.trim()) {
-      alert("Please enter your name");
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!username.trim() || !password.trim()) {
+      setError("Please enter username and password");
       return;
     }
 
     setIsLoading(true);
     try {
-      document.cookie = `employee_name=${encodeURIComponent(employeeName)}; path=/; max-age=86400`;
-      document.cookie = `employee_id=${employeeId}; path=/; max-age=86400`;
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
-      setTimeout(() => {
-        window.location.href = "/clients";
-      }, 100);
-    } catch (error) {
-      alert("Login error: " + error);
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || "Invalid credentials");
+        setIsLoading(false);
+        return;
+      }
+
+      const data = await response.json();
+
+      // Set cookies
+      document.cookie = `employee_id=${data.employee_id}; path=/; max-age=86400`;
+      document.cookie = `employee_name=${encodeURIComponent(data.name)}; path=/; max-age=86400`;
+      document.cookie = `employee_classification=${data.classification}; path=/; max-age=86400`;
+
+      // Redirect to dashboard
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setError("Login failed. Please try again.");
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleLogin();
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+    <div className="min-h-screen bg-firm-cream dark:bg-gray-900 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-soft p-8 w-full max-w-md border border-firm-border dark:border-gray-700">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-[#1C3350] mb-2">BFP Work</h1>
-          <p className="text-gray-600">Work Management System</p>
+          <h1 className="text-3xl font-bold text-firm-900 dark:text-white mb-2">BFP Work</h1>
+          <p className="text-firm-muted dark:text-gray-400">Accounting Workspace</p>
         </div>
 
-        <div className="space-y-4">
+        {error && (
+          <div className="mb-4 p-3 bg-firm-terracottaBg border border-firm-terracotta rounded-lg">
+            <p className="text-firm-terracottaText text-sm font-medium">{error}</p>
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Employee Name
+            <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-2">
+              Username
             </label>
             <input
               type="text"
-              value={employeeName}
-              onChange={(e) => setEmployeeName(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Enter your name"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350] focus:border-transparent"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              className="input-base w-full"
+              disabled={isLoading}
             />
+            <p className="text-xs text-firm-muted dark:text-gray-400 mt-1">
+              Demo: akshay or kaarthik
+            </p>
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Employee ID
+            <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-2">
+              Password
             </label>
-            <input
-              type="text"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              placeholder="1"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350] focus:border-transparent"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="input-base w-full pr-10"
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-firm-muted hover:text-firm-text"
+                disabled={isLoading}
+              >
+                {showPassword ? "👁️" : "👁️‍🗨️"}
+              </button>
+            </div>
+            <p className="text-xs text-firm-muted dark:text-gray-400 mt-1">
+              Password: akshay@123 or kaarthik@123
+            </p>
           </div>
 
           <button
-            onClick={handleLogin}
+            type="submit"
             disabled={isLoading}
-            className="w-full px-4 py-2 bg-[#1C3350] text-white rounded-lg hover:bg-[#152747] transition font-semibold mt-6 disabled:opacity-50"
+            className="btn-primary w-full mt-6"
           >
-            {isLoading ? "Logging in..." : "Login"}
+            {isLoading ? "Signing in..." : "Sign in"}
           </button>
-        </div>
+        </form>
 
-        <p className="text-xs text-gray-500 text-center mt-6">
-          Demo login - enter any name to continue
+        <p className="text-xs text-firm-muted dark:text-gray-400 text-center mt-6">
+          Demo credentials provided above
         </p>
       </div>
     </div>
