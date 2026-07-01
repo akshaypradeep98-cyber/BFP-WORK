@@ -68,16 +68,31 @@ export default function TeamWorkloadDashboard() {
   const [pendingChecks, setPendingChecks] = useState<PendingCheck[]>([]);
   const [pendingLevel2, setPendingLevel2] = useState<PendingLevel2[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [employeeName, setEmployeeName] = useState("");
+  const [greeting, setGreeting] = useState("");
 
   useEffect(() => {
     const checkAuthAndFetch = async () => {
-      const employeeName = document.cookie
+      const empNameCookie = document.cookie
         .split("; ")
-        .find((row) => row.startsWith("employee_name="));
+        .find((row) => row.startsWith("employee_name="))
+        ?.split("=")[1];
 
-      if (!employeeName) {
+      if (!empNameCookie) {
         router.push("/login");
         return;
+      }
+
+      setEmployeeName(decodeURIComponent(empNameCookie));
+
+      // Set greeting based on time
+      const hour = new Date().getHours();
+      if (hour < 12) {
+        setGreeting("Good morning");
+      } else if (hour < 18) {
+        setGreeting("Good afternoon");
+      } else {
+        setGreeting("Good evening");
       }
 
       await Promise.all([
@@ -258,6 +273,16 @@ export default function TeamWorkloadDashboard() {
             Logout
           </button>
         </div>
+      </div>
+
+      {/* Greeting Section */}
+      <div className="max-w-7xl mx-auto px-4 py-8 border-b border-firm-border dark:border-gray-700">
+        <h1 className="text-h1 font-medium text-firm-text dark:text-firm-cream">
+          {greeting}, {employeeName}
+        </h1>
+        <p className="text-sm text-firm-muted dark:text-gray-400 mt-1">
+          Welcome back. Here&apos;s your team&apos;s workload overview.
+        </p>
       </div>
 
       {/* Main Content */}
