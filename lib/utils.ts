@@ -3,13 +3,10 @@
 export const AVATAR_COLORS = ["#2a5d8f", "#1f7a52", "#c87a23", "#7a4fa0", "#b3392f"];
 
 export const CLASSIFICATIONS = [
-  "Partner",
-  "Manager",
-  "Senior",
-  "Semi-Senior",
-  "Article Assistant",
-  "Trainee",
-  "Admin Staff",
+  "admin",
+  "manager",
+  "article",
+  "staff",
 ];
 
 export function getInitials(name: string): string {

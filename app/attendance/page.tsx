@@ -2,226 +2,128 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-interface AttendanceRecord {
-  id: number;
-  employee_id: number;
-  employee_name: string;
-  login_at: string;
-  logout_at: string | null;
-}
-
-interface Employee {
-  id: number;
-  name: string;
-}
+import NavbarRefined from "@/components/NavbarRefined";
 
 export default function AttendancePage() {
   const router = useRouter();
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState("Hari");
 
   useEffect(() => {
-    const checkAuthAndFetch = async () => {
-      const employeeName = document.cookie
+    const checkAuth = () => {
+      const empId = document.cookie
         .split("; ")
-        .find((row) => row.startsWith("employee_name="));
+        .find((row) => row.startsWith("employee_id="))
+        ?.split("=")[1];
 
-      if (!employeeName) {
+      if (!empId) {
         router.push("/login");
         return;
       }
-
-      await Promise.all([fetchAttendanceRecords(), fetchEmployees()]);
+      setIsLoading(false);
     };
 
-    checkAuthAndFetch();
+    checkAuth();
   }, [router]);
-
-  const fetchAttendanceRecords = async (employeeId: number | null = null) => {
-    try {
-      const url = employeeId
-        ? `/api/attendance?employee_id=${employeeId}`
-        : "/api/attendance";
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to fetch attendance records");
-      const data = await response.json();
-      setRecords(data);
-    } catch (error) {
-      console.error("Error fetching attendance records:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchEmployees = async () => {
-    try {
-      const response = await fetch("/api/employees");
-      if (!response.ok) throw new Error("Failed to fetch employees");
-      const data = await response.json();
-      setEmployees(data);
-    } catch (error) {
-      console.error("Error fetching employees:", error);
-    }
-  };
-
-  const handleEmployeeFilter = (employeeId: number | null) => {
-    setSelectedEmployeeId(employeeId);
-    setIsLoading(true);
-    fetchAttendanceRecords(employeeId);
-  };
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
-
-  const calculateDuration = (loginAt: string, logoutAt: string | null) => {
-    if (!logoutAt) return "";
-
-    const loginTime = new Date(loginAt).getTime();
-    const logoutTime = new Date(logoutAt).getTime();
-    const durationMs = logoutTime - loginTime;
-    const durationMinutes = Math.floor(durationMs / 60000);
-
-    const hours = Math.floor(durationMinutes / 60);
-    const minutes = durationMinutes % 60;
-
-    return `${hours}h ${minutes}m`;
-  };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
       </div>
     );
   }
 
+  const attendanceData = [
+    { date: "Mon, Jun 15", status: "Present", checkIn: "09:32", checkOut: "18:10", hours: "8h 38m", statusBg: "bg-green-100", statusColor: "text-green-700" },
+    { date: "Tue, Jun 16", status: "Present", checkIn: "09:48", checkOut: "18:22", hours: "8h 34m", statusBg: "bg-green-100", statusColor: "text-green-700" },
+    { date: "Wed, Jun 17", status: "Half Day", checkIn: "09:40", checkOut: "13:30", hours: "3h 50m", statusBg: "bg-amber-100", statusColor: "text-amber-800" },
+    { date: "Thu, Jun 18", status: "Present", checkIn: "09:29", checkOut: "18:05", hours: "8h 36m", statusBg: "bg-green-100", statusColor: "text-green-700" },
+    { date: "Fri, Jun 19", status: "On Leave", checkIn: "–", checkOut: "–", hours: "–", statusBg: "bg-purple-100", statusColor: "text-purple-700" },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-[#1C3350] text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
+      <NavbarRefined />
+
+      <div className="px-11 py-9">
+        <div className="mb-8 flex items-end justify-between">
           <div>
-            <h1 className="text-3xl font-bold">BFP Work</h1>
-            <p className="text-sm text-gray-300 mt-1">Attendance</p>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">Attendance ⏱️</h1>
+            <p className="text-slate-600">Daily check-in and hours logged</p>
           </div>
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="text-white hover:text-gray-300 transition"
-          >
-            ← Back to Dashboard
-          </button>
+          <div>
+            <label className="text-sm font-bold text-slate-700 block mb-2">
+              Filter by Employee
+            </label>
+            <select
+              value={selectedEmployee}
+              onChange={(e) => setSelectedEmployee(e.target.value)}
+              className="px-3.5 py-2.5 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 min-w-48"
+            >
+              <option>Hari</option>
+              <option>Akshay</option>
+              <option>Treesa</option>
+            </select>
+          </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Filter Section */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Filter by Employee
-          </label>
-          <select
-            value={selectedEmployeeId || ""}
-            onChange={(e) =>
-              handleEmployeeFilter(
-                e.target.value ? parseInt(e.target.value) : null
-              )
-            }
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350] bg-white"
-          >
-            <option value="">Show all employees</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.name}
-              </option>
+        <div className="grid grid-cols-4 gap-5 mb-7">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-500/6">
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              Present
+            </div>
+            <div className="text-4xl font-bold text-green-600">3</div>
+          </div>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-500/6">
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              Half Day
+            </div>
+            <div className="text-4xl font-bold text-amber-700">1</div>
+          </div>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-500/6">
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              On Leave
+            </div>
+            <div className="text-4xl font-bold text-violet-600">1</div>
+          </div>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-500/6">
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              Avg Hours
+            </div>
+            <div className="text-4xl font-bold text-pink-500">8h 22m</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-violet-500/6 overflow-hidden">
+          <div className="grid grid-cols-5 gap-6 p-6 font-bold text-xs text-slate-500 uppercase tracking-wide bg-slate-50 border-b border-slate-100">
+            <div>Date</div>
+            <div>Check In</div>
+            <div>Check Out</div>
+            <div>Hours</div>
+            <div>Status</div>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {attendanceData.map((record, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-5 gap-6 p-6 items-center bg-slate-50 hover:bg-slate-100 transition"
+              >
+                <div className="font-bold text-sm text-slate-900">{record.date}</div>
+                <div className="font-semibold text-sm text-slate-600">{record.checkIn}</div>
+                <div className="font-semibold text-sm text-slate-600">{record.checkOut}</div>
+                <div className="font-bold text-sm text-slate-900">{record.hours}</div>
+                <div>
+                  <span
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold ${record.statusBg} ${record.statusColor}`}
+                  >
+                    {record.status}
+                  </span>
+                </div>
+              </div>
             ))}
-          </select>
-        </div>
-
-        {/* Attendance Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          {records.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-700">
-                      Employee
-                    </th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-700">
-                      Date
-                    </th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-700">
-                      Login Time
-                    </th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-700">
-                      Logout Time
-                    </th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-700">
-                      Duration
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.map((record) => {
-                    const isActive = !record.logout_at;
-                    const bgColor = isActive ? "bg-green-50" : "";
-
-                    return (
-                      <tr
-                        key={record.id}
-                        className={`border-b border-gray-200 hover:bg-gray-50 ${bgColor}`}
-                      >
-                        <td className="px-6 py-3 text-sm font-medium text-gray-900">
-                          {record.employee_name}
-                        </td>
-                        <td className="px-6 py-3 text-sm text-gray-600">
-                          {formatDate(record.login_at)}
-                        </td>
-                        <td className="px-6 py-3 text-sm text-gray-600">
-                          {formatTime(record.login_at)}
-                        </td>
-                        <td className="px-6 py-3 text-sm text-gray-600">
-                          {isActive ? (
-                            <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                              Active
-                            </span>
-                          ) : (
-                            record.logout_at ? formatTime(record.logout_at) : 'Active'
-                          )}
-                        </td>
-                        <td className="px-6 py-3 text-sm font-mono text-gray-600">
-                          {calculateDuration(record.login_at, record.logout_at)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-6 text-center text-gray-600">
-              No attendance records found
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

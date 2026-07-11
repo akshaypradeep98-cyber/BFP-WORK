@@ -9,37 +9,42 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow access to API routes
-  if (pathname.startsWith("/api/auth/login")) {
+  // Allow access to auth API routes without authentication
+  if (pathname.startsWith("/api/auth/")) {
     return NextResponse.next();
   }
 
-  // Protect all authenticated routes
-  if (
-    pathname === "/dashboard" ||
-    pathname === "/employees" ||
-    pathname === "/clients" ||
-    pathname === "/tasks" ||
-    pathname === "/calendar" ||
-    pathname === "/billing" ||
-    pathname === "/leave" ||
-    pathname === "/reports" ||
-    pathname === "/invoices" ||
-    pathname === "/dsc" ||
-    pathname === "/activity" ||
-    pathname === "/attendance" ||
-    pathname.startsWith("/tasks/") ||
-    pathname.startsWith("/api/employees") ||
-    pathname.startsWith("/api/clients") ||
-    pathname.startsWith("/api/tasks") ||
-    pathname.startsWith("/api/payments") ||
-    pathname.startsWith("/api/divisions") ||
-    pathname.startsWith("/api/leave-requests") ||
-    pathname.startsWith("/api/reports") ||
-    pathname.startsWith("/api/dsc-register") ||
-    pathname.startsWith("/api/activity-log") ||
-    pathname.startsWith("/api/attendance")
-  ) {
+  // Protect all authenticated page routes
+  const protectedPageRoutes = [
+    "/dashboard",
+    "/employees",
+    "/clients",
+    "/tasks",
+    "/calendar",
+    "/billing",
+    "/leave",
+    "/reports",
+    "/attendance",
+    "/templates",
+  ];
+
+  const isProtectedPageRoute = protectedPageRoutes.some(
+    (route) => pathname === route || pathname.startsWith(route + "/")
+  );
+
+  // Protect API routes that exist
+  const protectedApiRoutes = [
+    "/api/employees",
+    "/api/clients",
+    "/api/tasks",
+    "/api/templates",
+  ];
+
+  const isProtectedApiRoute = protectedApiRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+
+  if (isProtectedPageRoute || isProtectedApiRoute) {
     if (!employeeId) {
       return NextResponse.redirect(new URL("/login", request.url));
     }

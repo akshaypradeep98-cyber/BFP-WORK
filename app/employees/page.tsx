@@ -1,7 +1,9 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 import EmployeeTable from "./components/EmployeeTable";
 import EmployeeModal from "./components/EmployeeModal";
 
@@ -37,8 +39,19 @@ export default function EmployeesPage() {
         .split("; ")
         .find((row) => row.startsWith("employee_name="));
 
+      const classification = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("employee_classification="))
+        ?.split("=")[1];
+
       if (!employeeName) {
         router.push("/login");
+        return;
+      }
+
+      // Only admins can access employees page
+      if (classification !== "admin") {
+        router.push("/dashboard");
         return;
       }
 
@@ -118,60 +131,43 @@ export default function EmployeesPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-[#1C3350] text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">BFP Work</h1>
-              <p className="text-sm text-gray-300 mt-1">Employee Master</p>
-            </div>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="text-white hover:text-gray-300 transition"
-            >
-              ← Back to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
+      <NavbarRefined />
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="px-11 py-9">
         {/* Page Title and Actions */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Employee Master
-            </h2>
-            <button
-              onClick={handleAddClick}
-              className="px-4 py-2 bg-[#1C3350] text-white rounded-lg hover:bg-[#152747] transition font-semibold"
-            >
-              + Add Employee
-            </button>
+        <div className="mb-8 flex items-end justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">Employees 👥</h1>
+            <p className="text-slate-600">Your team, their roles and available capacity</p>
           </div>
-
-          {/* Search Box */}
-          <input
-            type="text"
-            placeholder="Search by name, classification, role, or username..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350] focus:border-transparent"
-          />
+          <button
+            onClick={handleAddClick}
+            className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
+          >
+            + Add Employee
+          </button>
         </div>
 
+        {/* Search Box */}
+        <input
+          type="text"
+          placeholder="Search by name, classification, role, or username..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 mb-6"
+        />
+
         {/* Table */}
-        <div className="bg-white rounded-lg shadow">
+        <div className="bg-white rounded-2xl shadow-sm border border-violet-500/6 overflow-hidden">
           <EmployeeTable
             employees={employees}
             searchQuery={searchQuery}

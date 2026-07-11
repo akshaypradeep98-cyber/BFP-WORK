@@ -17,6 +17,13 @@ interface Division {
   name: string;
 }
 
+interface Template {
+  id: number;
+  name: string;
+  category: string;
+  keyword: string | null;
+}
+
 interface TaskModalProps {
   isOpen: boolean;
   employees: Employee[];
@@ -42,8 +49,11 @@ export default function TaskModal({
     due_date: "",
     amount: "",
     tax_period: "25-26",
+    template_id: "",
   });
 
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [groupedTemplates, setGroupedTemplates] = useState<Record<string, Template[]>>({});
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -51,6 +61,7 @@ export default function TaskModal({
 
   useEffect(() => {
     if (isOpen) {
+      fetchTemplates();
       setFormData({
         title: "",
         client_id: "",
@@ -59,10 +70,34 @@ export default function TaskModal({
         due_date: "",
         amount: "",
         tax_period: "25-26",
+        template_id: "",
       });
       setError("");
     }
   }, [isOpen]);
+
+  const fetchTemplates = async () => {
+    try {
+      const response = await fetch("/api/templates");
+      if (!response.ok) throw new Error("Failed to fetch templates");
+      const data = await response.json();
+      setTemplates(data);
+
+      // Group by category
+      const grouped = data.reduce(
+        (acc: Record<string, Template[]>, template: Template) => {
+          const category = template.category || "Uncategorized";
+          if (!acc[category]) acc[category] = [];
+          acc[category].push(template);
+          return acc;
+        },
+        {}
+      );
+      setGroupedTemplates(grouped);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+    }
+  };
 
   const handleSave = async () => {
     setError("");
@@ -86,6 +121,7 @@ export default function TaskModal({
         due_date: formData.due_date || null,
         amount: formData.amount ? parseInt(formData.amount) : 0,
         tax_period: formData.tax_period,
+        template_id: formData.template_id ? parseInt(formData.template_id) : null,
       });
       onClose();
     } catch (err: any) {
@@ -118,6 +154,43 @@ export default function TaskModal({
               {error}
             </div>
           )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Task Type / Template
+            </label>
+            <select
+              value={formData.template_id}
+              onChange={(e) => {
+                setFormData({ ...formData, template_id: e.target.value });
+                // Auto-fill title if template selected
+                if (e.target.value) {
+                  const selected = templates.find(
+                    (t) => t.id === parseInt(e.target.value)
+                  );
+                  if (selected) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      title: selected.name,
+                    }));
+                  }
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350]"
+            >
+              <option value="">Custom / Blank</option>
+              {Object.entries(groupedTemplates).map(([category, categoryTemplates]) => (
+                <optgroup key={category} label={category}>
+                  {categoryTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                      {template.keyword && ` (${template.keyword})`}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

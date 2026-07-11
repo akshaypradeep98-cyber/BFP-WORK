@@ -1,6 +1,13 @@
 ﻿// Role-Based Access Control utilities
+import bcrypt from "bcryptjs";
 
 export type Classification = "admin" | "manager" | "article" | "staff";
+
+// Hash password for secure storage
+export async function hashPassword(password: string): Promise<string> {
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
+}
 
 export interface User {
   employee_id: number;

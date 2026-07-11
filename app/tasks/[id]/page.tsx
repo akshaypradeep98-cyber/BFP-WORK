@@ -83,6 +83,7 @@ export default function TaskDetailPage() {
     assignerName: "",
   });
   const [currentUserName, setCurrentUserName] = useState("");
+  const [userClassification, setUserClassification] = useState<string>("");
 
   // Checker assignment state
   const [showCheckerAssignment, setShowCheckerAssignment] = useState(false);
@@ -99,12 +100,18 @@ export default function TaskDetailPage() {
         .find((row) => row.startsWith("employee_name="))
         ?.split("=")[1];
 
+      const classification = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("employee_classification="))
+        ?.split("=")[1];
+
       if (!employeeName) {
         router.push("/login");
         return;
       }
 
       setCurrentUserName(decodeURIComponent(employeeName));
+      setUserClassification(classification || "");
 
       await Promise.all([
         fetchTask(),
@@ -119,13 +126,35 @@ export default function TaskDetailPage() {
 
   const fetchTask = async () => {
     try {
+      const employeeId = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("employee_id="))
+        ?.split("=")[1];
+
+      const classification = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("employee_classification="))
+        ?.split("=")[1];
+
       const response = await fetch(`/api/tasks/${taskId}`);
       if (!response.ok) throw new Error("Failed to fetch task");
       const data = await response.json();
+
+      // Check access control: only assigned employee or admin can view
+      if (
+        classification !== "admin" &&
+        data.employee_id !== parseInt(employeeId || "0")
+      ) {
+        setError("You do not have access to this task");
+        setIsLoading(false);
+        return;
+      }
+
       setTask(data);
       setHasSubtasks(data.subtasks && data.subtasks.length > 0);
     } catch (error) {
       console.error("Error fetching task:", error);
+      setError("Failed to fetch task");
     } finally {
       setIsLoading(false);
     }
@@ -167,8 +196,12 @@ export default function TaskDetailPage() {
   const handleStatusChange = async (newStatus: string) => {
     if (!task) return;
 
-    // If marking as done, show checker assignment options
+    // If marking as done, only allow admins to assign checkers
     if (newStatus === "done") {
+      if (userClassification !== "admin") {
+        alert("Only admins can mark tasks as done and assign checkers");
+        return;
+      }
       setShowCheckerAssignment(true);
       setCheckerAssignmentOption(null);
       setSelectedChecker(null);
@@ -268,6 +301,11 @@ export default function TaskDetailPage() {
   };
 
   const handleReassign = async (newEmployeeId: number) => {
+    if (userClassification !== "admin") {
+      alert("Only admins can reassign tasks");
+      return;
+    }
+
     if (!task || newEmployeeId === 0 || !newEmployeeId) {
       console.log("[handleReassign] Invalid employee ID:", newEmployeeId);
       return;
@@ -376,10 +414,34 @@ export default function TaskDetailPage() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <Link
+            href="/tasks"
+            className="text-blue-600 hover:underline text-sm mb-4 inline-block"
+          >
+            ← Back to Tasks
+          </Link>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-700 font-semibold">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!task) {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 py-8">
+          <Link
+            href="/tasks"
+            className="text-blue-600 hover:underline text-sm mb-4 inline-block"
+          >
+            ← Back to Tasks
+          </Link>
           <p className="text-gray-600">Task not found</p>
         </div>
       </div>
@@ -487,38 +549,55 @@ export default function TaskDetailPage() {
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200 dark:border-gray-600">
-            {/* Status dropdown */}
+            {/* Status dropdown - Admin only for marking done */}
             <div className="flex-1">
               <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-2">Status</label>
               <select
                 value={task.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className={`w-full px-3 py-2 rounded-md font-semibold text-sm border-0 focus:outline-none focus:ring-2 focus:ring-accent-400 cursor-pointer ${
+                disabled={userClassification !== "admin" && task.status === "done"}
+                className={`w-full px-3 py-2 rounded-md font-semibold text-sm border-0 focus:outline-none focus:ring-2 focus:ring-accent-400 ${
+                  userClassification !== "admin" && task.status === "done" ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                } ${
                   STATUS_COLORS[task.status] || STATUS_COLORS["todo"]
                 } dark:text-white`}
               >
                 <option value="todo">To do</option>
                 <option value="prog">In progress</option>
-                <option value="done">Done</option>
+                {userClassification === "admin" && <option value="done">Done</option>}
               </select>
+              {userClassification !== "admin" && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Only admins can mark tasks as done
+                </p>
+              )}
             </div>
 
-            {/* Reassign dropdown */}
-            <div className="flex-1">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-2">Reassign</label>
-              <select
-                value={task.employee_id || ""}
-                onChange={(e) => handleReassign(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-400 text-sm cursor-pointer dark:bg-gray-600 dark:text-white"
-              >
-                <option value="">Unassigned</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Reassign dropdown - Admin only */}
+            {userClassification === "admin" ? (
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-2">Reassign</label>
+                <select
+                  value={task.employee_id || ""}
+                  onChange={(e) => handleReassign(parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-400 text-sm cursor-pointer dark:bg-gray-600 dark:text-white"
+                >
+                  <option value="">Unassigned</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 block mb-2">Reassign</label>
+                <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400">
+                  Admin only
+                </div>
+              </div>
+            )}
 
             {/* Time logged */}
             {totalSeconds > 0 && (

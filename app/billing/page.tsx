@@ -1,459 +1,206 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 
-interface Task {
+interface BillingRecord {
   id: number;
-  title: string;
-  client_id: number;
-  division_id: number;
-  amount: number;
-  tax_period?: string;
+  client: string;
+  task: string;
+  amount: string;
+  received: string;
+  balance: string;
+  status: string;
+  statusBg: string;
+  statusColor: string;
+  avatar_color: string;
 }
-
-interface Client {
-  id: number;
-  name: string;
-}
-
-interface Division {
-  id: number;
-  name: string;
-  color: string;
-}
-
-interface Payment {
-  id: number;
-  task_id: number;
-  amount: number;
-  payment_date: string;
-  mode: string;
-}
-
-type GroupBy = "client" | "division" | "client_period";
 
 export default function BillingPage() {
   const router = useRouter();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [divisions, setDivisions] = useState<Division[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [groupBy, setGroupBy] = useState<GroupBy>("client");
+  const [activeTab, setActiveTab] = useState("client");
 
   useEffect(() => {
-    const checkAuthAndFetch = async () => {
-      const employeeName = document.cookie
+    const checkAuth = () => {
+      const empId = document.cookie
         .split("; ")
-        .find((row) => row.startsWith("employee_name="));
+        .find((row) => row.startsWith("employee_id="))
+        ?.split("=")[1];
 
-      if (!employeeName) {
+      const classification = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("employee_classification="))
+        ?.split("=")[1];
+
+      if (!empId) {
         router.push("/login");
         return;
       }
 
-      await Promise.all([
-        fetchTasks(),
-        fetchClients(),
-        fetchDivisions(),
-        fetchPayments(),
-      ]);
+      if (classification !== "admin") {
+        router.push("/dashboard");
+        return;
+      }
+
+      setIsLoading(false);
     };
 
-    checkAuthAndFetch();
+    checkAuth();
   }, [router]);
-
-  const fetchTasks = async () => {
-    try {
-      const response = await fetch("/api/tasks");
-      if (!response.ok) throw new Error("Failed to fetch tasks");
-      const data = await response.json();
-      setTasks(data);
-    } catch (error) {
-      console.error("Error fetching tasks:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchClients = async () => {
-    try {
-      const response = await fetch("/api/clients");
-      if (!response.ok) throw new Error("Failed to fetch clients");
-      const data = await response.json();
-      setClients(data);
-    } catch (error) {
-      console.error("Error fetching clients:", error);
-    }
-  };
-
-  const fetchDivisions = async () => {
-    try {
-      const response = await fetch("/api/divisions");
-      if (!response.ok) throw new Error("Failed to fetch divisions");
-      const data = await response.json();
-      setDivisions(data);
-    } catch (error) {
-      console.error("Error fetching divisions:", error);
-    }
-  };
-
-  const fetchPayments = async () => {
-    try {
-      const response = await fetch("/api/payments");
-      if (!response.ok) throw new Error("Failed to fetch payments");
-      const data = await response.json();
-      setPayments(data);
-    } catch (error) {
-      console.error("Error fetching payments:", error);
-    }
-  };
-
-  const getTaskPayments = (taskId: number) => {
-    return payments.filter((p) => p.task_id === taskId);
-  };
-
-  const getTotalReceived = (taskId: number) => {
-    return getTaskPayments(taskId).reduce((sum, p) => sum + p.amount, 0);
-  };
-
-  const formatRupees = (value: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const getPaymentStatus = (amount: number, received: number) => {
-    const balance = amount - received;
-    if (balance === 0) {
-      return { label: "Paid", color: "bg-green-100 text-green-800" };
-    } else if (received > 0) {
-      return { label: "Part-paid", color: "bg-amber-100 text-amber-800" };
-    } else {
-      return { label: "Unpaid", color: "bg-gray-100 text-gray-800" };
-    }
-  };
-
-  // Calculate totals
-  const totalPayable = tasks.reduce((sum, t) => sum + t.amount, 0);
-  const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
-  const outstanding = totalPayable - totalReceived;
-
-  // Group tasks
-  const groupedTasks = tasks.reduce(
-    (acc, task) => {
-      const groupId = groupBy === "client" ? task.client_id : task.division_id;
-      if (!acc[groupId]) {
-        acc[groupId] = [];
-      }
-      acc[groupId].push(task);
-      return acc;
-    },
-    {} as Record<number, Task[]>
-  );
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
       </div>
     );
   }
 
-  const renderSimpleGrouping = () => {
-    return Object.entries(groupedTasks).map(([groupId, groupTasks]) => {
-      const groupName =
-        groupBy === "client"
-          ? clients.find((c) => c.id === parseInt(groupId))?.name
-          : divisions.find((d) => d.id === parseInt(groupId))?.name;
-
-      const groupPayable = groupTasks.reduce((sum, t) => sum + t.amount, 0);
-      const groupReceived = groupTasks.reduce(
-        (sum, t) => sum + getTotalReceived(t.id),
-        0
-      );
-      const groupBalance = groupPayable - groupReceived;
-
-      return (
-        <tbody key={groupId}>
-          <tr className="bg-gray-100 border-b border-gray-200">
-            <td colSpan={2} className="px-6 py-3 text-sm font-semibold text-gray-900">
-              {groupName}
-            </td>
-            <td className="text-right px-6 py-3 text-sm font-semibold text-gray-900">
-              {formatRupees(groupPayable)}
-            </td>
-            <td className="text-right px-6 py-3 text-sm font-semibold text-gray-900">
-              {formatRupees(groupReceived)}
-            </td>
-            <td className="text-right px-6 py-3 text-sm font-semibold text-gray-900">
-              {formatRupees(groupBalance)}
-            </td>
-            <td></td>
-          </tr>
-
-          {groupTasks.map((task) => {
-            const received = getTotalReceived(task.id);
-            const balance = task.amount - received;
-            const status = getPaymentStatus(task.amount, received);
-
-            return (
-              <tr
-                key={task.id}
-                onClick={() => router.push(`/tasks/${task.id}`)}
-                className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer"
-              >
-                <td className="px-6 py-3"></td>
-                <td className="px-6 py-3 text-sm text-gray-900">{task.title}</td>
-                <td className="text-right px-6 py-3 text-sm text-gray-900">
-                  {formatRupees(task.amount)}
-                </td>
-                <td className="text-right px-6 py-3 text-sm text-gray-900">
-                  {formatRupees(received)}
-                </td>
-                <td className="text-right px-6 py-3 text-sm text-gray-900">
-                  {formatRupees(balance)}
-                </td>
-                <td className="text-center px-6 py-3">
-                  <span className={`inline-block px-3 py-1 rounded text-xs font-semibold ${status.color}`}>
-                    {status.label}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      );
-    });
-  };
-
-  const renderClientPeriodGrouping = () => {
-    const clientPeriodGroups: Record<number, Record<string, Task[]>> = {};
-
-    tasks.forEach((task) => {
-      const clientId = task.client_id;
-      const period = task.tax_period || "25-26";
-
-      if (!clientPeriodGroups[clientId]) {
-        clientPeriodGroups[clientId] = {};
-      }
-      if (!clientPeriodGroups[clientId][period]) {
-        clientPeriodGroups[clientId][period] = [];
-      }
-      clientPeriodGroups[clientId][period].push(task);
-    });
-
-    return Object.entries(clientPeriodGroups).map(([clientId, periods]) => {
-      const clientName = clients.find((c) => c.id === parseInt(clientId))?.name;
-      const clientPayable = Object.values(periods).flat().reduce((sum, t) => sum + t.amount, 0);
-      const clientReceived = Object.values(periods)
-        .flat()
-        .reduce((sum, t) => sum + getTotalReceived(t.id), 0);
-      const clientBalance = clientPayable - clientReceived;
-
-      return (
-        <tbody key={clientId}>
-          {/* Client Header */}
-          <tr className="bg-gray-800 border-b border-gray-200">
-            <td colSpan={6} className="px-6 py-3 text-sm font-bold text-white">
-              {clientName}
-            </td>
-          </tr>
-
-          {/* Period Groups */}
-          {Object.entries(periods).map(([period, periodTasks]) => {
-            const periodPayable = periodTasks.reduce((sum, t) => sum + t.amount, 0);
-            const periodReceived = periodTasks.reduce(
-              (sum, t) => sum + getTotalReceived(t.id),
-              0
-            );
-            const periodBalance = periodPayable - periodReceived;
-
-            return (
-              <React.Fragment key={`${clientId}-${period}`}>
-                {/* Period Sub-header */}
-                <tr className="bg-gray-200 border-b border-gray-200">
-                  <td colSpan={2} className="px-6 py-2 text-sm font-semibold text-gray-900">
-                    FY {period}
-                  </td>
-                  <td className="text-right px-6 py-2 text-sm font-semibold text-gray-900">
-                    {formatRupees(periodPayable)}
-                  </td>
-                  <td className="text-right px-6 py-2 text-sm font-semibold text-gray-900">
-                    {formatRupees(periodReceived)}
-                  </td>
-                  <td className="text-right px-6 py-2 text-sm font-semibold text-gray-900">
-                    {formatRupees(periodBalance)}
-                  </td>
-                  <td></td>
-                </tr>
-
-                {/* Task Rows */}
-                {periodTasks.map((task) => {
-                  const received = getTotalReceived(task.id);
-                  const balance = task.amount - received;
-                  const status = getPaymentStatus(task.amount, received);
-
-                  return (
-                    <tr
-                      key={task.id}
-                      onClick={() => router.push(`/tasks/${task.id}`)}
-                      className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer"
-                    >
-                      <td className="px-6 py-3"></td>
-                      <td className="px-6 py-3 text-sm text-gray-900">{task.title}</td>
-                      <td className="text-right px-6 py-3 text-sm text-gray-900">
-                        {formatRupees(task.amount)}
-                      </td>
-                      <td className="text-right px-6 py-3 text-sm text-gray-900">
-                        {formatRupees(received)}
-                      </td>
-                      <td className="text-right px-6 py-3 text-sm text-gray-900">
-                        {formatRupees(balance)}
-                      </td>
-                      <td className="text-center px-6 py-3">
-                        <span className={`inline-block px-3 py-1 rounded text-xs font-semibold ${status.color}`}>
-                          {status.label}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </React.Fragment>
-            );
-          })}
-
-          {/* Client Total */}
-          <tr className="bg-gray-300 border-b border-gray-200">
-            <td colSpan={2} className="px-6 py-3 text-sm font-bold text-gray-900">
-              Total
-            </td>
-            <td className="text-right px-6 py-3 text-sm font-bold text-gray-900">
-              {formatRupees(clientPayable)}
-            </td>
-            <td className="text-right px-6 py-3 text-sm font-bold text-gray-900">
-              {formatRupees(clientReceived)}
-            </td>
-            <td className="text-right px-6 py-3 text-sm font-bold text-gray-900">
-              {formatRupees(clientBalance)}
-            </td>
-            <td></td>
-          </tr>
-        </tbody>
-      );
-    });
-  };
+  const billingData: BillingRecord[] = [
+    {
+      id: 1,
+      client: "Adani",
+      task: "ROC annual filing",
+      amount: "₹25,000",
+      received: "₹25,000",
+      balance: "₹0",
+      status: "Paid",
+      statusBg: "bg-green-100",
+      statusColor: "text-green-700",
+      avatar_color: "#7c3aed",
+    },
+    {
+      id: 2,
+      client: "Zenith Corp",
+      task: "GST returns – Q1",
+      amount: "₹40,000",
+      received: "₹40,000",
+      balance: "₹0",
+      status: "Paid",
+      statusBg: "bg-green-100",
+      statusColor: "text-green-700",
+      avatar_color: "#ec4899",
+    },
+    {
+      id: 3,
+      client: "Nova Retail",
+      task: "Statutory audit FY24-25",
+      amount: "₹60,000",
+      received: "₹25,000",
+      balance: "₹35,000",
+      status: "Partial",
+      statusBg: "bg-amber-100",
+      statusColor: "text-amber-800",
+      avatar_color: "#0ea5e9",
+    },
+    {
+      id: 4,
+      client: "Orchid Foods",
+      task: "TDS filing – Q1",
+      amount: "₹30,000",
+      received: "₹0",
+      balance: "₹30,000",
+      status: "Unpaid",
+      statusBg: "bg-red-100",
+      statusColor: "text-red-700",
+      avatar_color: "#f59e0b",
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-[#1C3350] text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">BFP Work</h1>
-              <p className="text-sm text-gray-300 mt-1">Billing</p>
-            </div>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="text-white hover:text-gray-300 transition"
-            >
-              ← Back to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
+      <NavbarRefined />
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="px-11 py-9">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-slate-900 mb-2">Billing 💰</h1>
+          <p className="text-slate-600">Track receivables across every client engagement</p>
+        </div>
+
         {/* Summary Cards */}
         <div className="grid grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-600 mb-2">Total Payable</p>
-            <p className="text-3xl font-bold text-gray-900">
-              {formatRupees(totalPayable)}
-            </p>
+          <div className="bg-gradient-to-br from-violet-600 to-purple-600 rounded-2xl p-7 text-white shadow-lg shadow-violet-600/28 relative overflow-hidden">
+            <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full"></div>
+            <div className="font-bold text-sm mb-2 relative">Total Payable</div>
+            <div className="text-4xl font-bold relative">₹1,55,000</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-600 mb-2">Received</p>
-            <p className="text-3xl font-bold text-green-900">
-              {formatRupees(totalReceived)}
-            </p>
+
+          <div className="bg-gradient-to-br from-green-600 to-emerald-600 rounded-2xl p-7 text-white shadow-lg shadow-green-600/28 relative overflow-hidden">
+            <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full"></div>
+            <div className="font-bold text-sm mb-2 relative">Received</div>
+            <div className="text-4xl font-bold relative">₹90,000</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-sm text-gray-600 mb-2">Outstanding</p>
-            <p className={`text-3xl font-bold ${outstanding === 0 ? "text-green-900" : "text-red-900"}`}>
-              {formatRupees(outstanding)}
-            </p>
+
+          <div className="bg-gradient-to-br from-red-600 to-rose-600 rounded-2xl p-7 text-white shadow-lg shadow-red-600/28 relative overflow-hidden">
+            <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full"></div>
+            <div className="font-bold text-sm mb-2 relative">Outstanding</div>
+            <div className="text-4xl font-bold relative">₹65,000</div>
           </div>
         </div>
 
-        {/* Toggle */}
-        <div className="mb-6">
-          <div className="inline-flex gap-2 bg-white rounded-lg p-1 shadow flex-wrap">
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
+          {[
+            { id: "client", label: "By Client" },
+            { id: "division", label: "By Division" },
+            { id: "period", label: "By Client & Period" },
+          ].map((tab) => (
             <button
-              onClick={() => setGroupBy("client")}
-              className={`px-4 py-2 rounded font-semibold text-sm transition ${
-                groupBy === "client"
-                  ? "bg-[#1C3350] text-white"
-                  : "text-gray-700 hover:bg-gray-100"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-2.5 rounded-lg text-sm font-bold transition ${
+                activeTab === tab.id
+                  ? "bg-gradient-to-r from-violet-600 to-pink-500 text-white shadow-lg shadow-violet-600/30"
+                  : "bg-white border border-slate-200 text-slate-600 hover:text-slate-900"
               }`}
             >
-              By Client
+              {tab.label}
             </button>
-            <button
-              onClick={() => setGroupBy("division")}
-              className={`px-4 py-2 rounded font-semibold text-sm transition ${
-                groupBy === "division"
-                  ? "bg-[#1C3350] text-white"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              By Division
-            </button>
-            <button
-              onClick={() => setGroupBy("client_period")}
-              className={`px-4 py-2 rounded font-semibold text-sm transition ${
-                groupBy === "client_period"
-                  ? "bg-[#1C3350] text-white"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              By Client & Period
-            </button>
-          </div>
+          ))}
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-700">
-                  {groupBy === "client" ? "Client" : groupBy === "division" ? "Division" : "Client / Period"}
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-700">
-                  Task
-                </th>
-                <th className="text-right px-6 py-3 text-xs font-semibold text-gray-700">
-                  Amount
-                </th>
-                <th className="text-right px-6 py-3 text-xs font-semibold text-gray-700">
-                  Received
-                </th>
-                <th className="text-right px-6 py-3 text-xs font-semibold text-gray-700">
-                  Balance
-                </th>
-                <th className="text-center px-6 py-3 text-xs font-semibold text-gray-700">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            {groupBy === "client_period" ? renderClientPeriodGrouping() : renderSimpleGrouping()}
-          </table>
+        <div className="bg-white rounded-2xl shadow-sm border border-violet-500/6 overflow-hidden">
+          <div className="grid grid-cols-6 gap-6 px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wide bg-slate-50 border-b border-slate-100">
+            <div>Client</div>
+            <div>Task</div>
+            <div>Amount</div>
+            <div>Received</div>
+            <div>Balance</div>
+            <div>Status</div>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {billingData.map((record, idx) => (
+              <div
+                key={record.id}
+                className={`grid grid-cols-6 gap-6 px-6 py-4 items-center hover:bg-slate-50 transition ${
+                  idx % 2 === 0 ? "bg-white" : "bg-slate-50"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs"
+                    style={{ backgroundColor: record.avatar_color }}
+                  >
+                    {record.client.charAt(0)}
+                  </div>
+                  <span className="font-bold text-sm text-slate-900">{record.client}</span>
+                </div>
+                <div className="font-semibold text-sm text-slate-600">{record.task}</div>
+                <div className="font-bold text-sm text-slate-900">{record.amount}</div>
+                <div className="font-bold text-sm text-green-600">{record.received}</div>
+                <div className="font-bold text-sm text-slate-900">{record.balance}</div>
+                <div>
+                  <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${record.statusBg} ${record.statusColor}`}>
+                    {record.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

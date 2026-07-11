@@ -51,75 +51,100 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-firm-cream dark:bg-gray-900 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-soft p-8 w-full max-w-md border border-firm-border dark:border-gray-700">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-firm-900 dark:text-white mb-2">BFP Work</h1>
-          <p className="text-firm-muted dark:text-gray-400">Accounting Workspace</p>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo & Title */}
+        <div className="text-center mb-10">
+          <div className="flex justify-center mb-4">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-violet-600 to-pink-500 flex items-center justify-center shadow-lg shadow-violet-600/35">
+              <span className="text-white font-black text-3xl">B</span>
+            </div>
+          </div>
+          <h1 className="text-4xl font-black bg-gradient-to-r from-violet-600 to-pink-500 bg-clip-text text-transparent mb-2">
+            BFP Work
+          </h1>
+          <p className="text-slate-600 font-medium">Practice Management System</p>
         </div>
 
-        {error && (
-          <div className="mb-4 p-3 bg-firm-terracottaBg border border-firm-terracotta rounded-lg">
-            <p className="text-firm-terracottaText text-sm font-medium">{error}</p>
-          </div>
-        )}
+        {/* Login Card */}
+        <div className="bg-white rounded-2xl shadow-lg border border-violet-500/10 p-8">
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+              <p className="text-red-700 text-sm font-semibold">{error}</p>
+            </div>
+          )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-2">
-              Username
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              className="input-base w-full"
-              disabled={isLoading}
-            />
-            <p className="text-xs text-firm-muted dark:text-gray-400 mt-1">
-              Demo: akshay or kaarthik
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-2">
-              Password
-            </label>
-            <div className="relative">
+          <form onSubmit={handleLogin} className="space-y-5">
+            {/* Username */}
+            <div>
+              <label className="block text-sm font-bold text-slate-900 mb-2">
+                Username
+              </label>
               <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="input-base w-full pr-10"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="akshay"
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                 disabled={isLoading}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-firm-muted hover:text-firm-text"
-                disabled={isLoading}
-              >
-                {showPassword ? "👁️" : "👁️‍🗨️"}
-              </button>
+              <p className="text-xs text-slate-500 mt-1.5 font-medium">
+                Try: akshay, kaarthik, treesa, or hari
+              </p>
             </div>
-            <p className="text-xs text-firm-muted dark:text-gray-400 mt-1">
-              Password: akshay@123 or kaarthik@123
+
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-bold text-slate-900 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 text-lg"
+                  disabled={isLoading}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "👁️" : "👁️‍🗨️"}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-1.5 font-medium">
+                All passwords: password@123
+              </p>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 bg-gradient-to-r from-violet-600 to-pink-500 hover:from-violet-700 hover:to-pink-600 text-white text-sm font-bold rounded-lg transition shadow-lg shadow-violet-600/30 disabled:opacity-70 disabled:cursor-not-allowed mt-7"
+            >
+              {isLoading ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+
+          {/* Footer Info */}
+          <div className="mt-6 pt-6 border-t border-slate-100">
+            <p className="text-xs text-slate-500 text-center">
+              <span className="font-semibold text-slate-600">Demo Credentials:</span>
+              <br />
+              Admin: akshay | Manager: kaarthik | Article: treesa | Staff: hari
             </p>
           </div>
+        </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="btn-primary w-full mt-6"
-          >
-            {isLoading ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
-
-        <p className="text-xs text-firm-muted dark:text-gray-400 text-center mt-6">
-          Demo credentials provided above
+        {/* Version Info */}
+        <p className="text-xs text-slate-500 text-center mt-6 font-medium">
+          BFP Work v1.0 · Practice Management System
         </p>
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import NavbarRefined from "@/components/NavbarRefined";
 
 interface Employee {
   id: number;
@@ -247,206 +247,113 @@ export default function TeamWorkloadDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
-      {/* Header */}
-      <div className="bg-[#1C3350] text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">BFP Work</h1>
-            <p className="text-sm text-gray-300 mt-1">Team Workload</p>
-          </div>
-          <button
-            onClick={() => {
-              document.cookie = "employee_id=; max-age=0; path=/";
-              document.cookie = "employee_name=; max-age=0; path=/";
-              router.push("/login");
-            }}
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
-
-      {/* Greeting Section */}
-      <div className="max-w-7xl mx-auto px-4 py-8 border-b border-firm-border dark:border-gray-700">
-        <h1 className="text-h1 font-medium text-firm-text dark:text-firm-cream">
-          {greeting}, {employeeName}
-        </h1>
-        <p className="text-sm text-firm-muted dark:text-gray-400 mt-1">
-          Welcome back. Here&apos;s your team&apos;s workload overview.
-        </p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
+      <NavbarRefined />
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Stat Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow p-6">
-            <p className="text-3xl font-bold text-[#1C3350] dark:text-amber-400">{openTasksCount}</p>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Open Tasks</p>
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-10 py-9">
+          {/* Header */}
+          <div className="mb-9">
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">Team Workload</h1>
+            <p className="text-slate-600 text-base">Real-time overview of capacity allocation and task distribution</p>
           </div>
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow p-6">
-            <p className="text-3xl font-bold text-red-600 dark:text-red-400">{overdueCount}</p>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Overdue</p>
+
+          {/* Key Metrics Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-10">
+            {/* Open Tasks Card */}
+            <div className="bg-gradient-to-br from-indigo-100 to-purple-100 border border-indigo-300 rounded-3xl p-6 relative overflow-hidden">
+              <div className="absolute -top-5 -right-5 w-24 h-24 bg-indigo-400 opacity-10 rounded-full"></div>
+              <div className="text-indigo-600 text-xs font-bold uppercase tracking-wider mb-3">📋 Open Tasks</div>
+              <div className="text-5xl font-bold text-indigo-600">{openTasksCount}</div>
+              <div className="text-slate-600 text-sm mt-2">Awaiting assignment</div>
+            </div>
+
+            {/* Overdue Card */}
+            <div className="bg-gradient-to-br from-red-100 to-orange-100 border border-red-300 rounded-3xl p-6 relative overflow-hidden">
+              <div className="absolute -top-5 -right-5 w-24 h-24 bg-red-400 opacity-10 rounded-full"></div>
+              <div className="text-red-600 text-xs font-bold uppercase tracking-wider mb-3">⏰ Overdue</div>
+              <div className="text-5xl font-bold text-red-600">{overdueCount}</div>
+              <div className="text-slate-600 text-sm mt-2">Past deadline</div>
+            </div>
+
+            {/* Available Card */}
+            <div className="bg-gradient-to-br from-green-100 to-emerald-100 border border-green-300 rounded-3xl p-6 relative overflow-hidden">
+              <div className="absolute -top-5 -right-5 w-24 h-24 bg-green-400 opacity-10 rounded-full"></div>
+              <div className="text-green-600 text-xs font-bold uppercase tracking-wider mb-3">✨ Available</div>
+              <div className="text-5xl font-bold text-green-600">{freeStaffCount}</div>
+              <div className="text-slate-600 text-sm mt-2">Team members ready</div>
+            </div>
+
+            {/* On Leave Card */}
+            <div className="bg-gradient-to-br from-amber-100 to-yellow-100 border border-amber-300 rounded-3xl p-6 relative overflow-hidden">
+              <div className="absolute -top-5 -right-5 w-24 h-24 bg-amber-400 opacity-10 rounded-full"></div>
+              <div className="text-amber-600 text-xs font-bold uppercase tracking-wider mb-3">🏖️ On Leave</div>
+              <div className="text-5xl font-bold text-amber-600">{onLeaveCount}</div>
+              <div className="text-slate-600 text-sm mt-2">This week</div>
+            </div>
           </div>
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow p-6">
-            <p className="text-3xl font-bold text-green-600 dark:text-green-400">{freeStaffCount}</p>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Free Staff</p>
-          </div>
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow p-6">
-            <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{onLeaveCount}</p>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">On Leave</p>
+
+          {/* Team Capacity Card */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-7 shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-900 mb-6">Team Capacity</h2>
+
+            <div className="space-y-6">
+              {employees.map((employee, idx) => {
+                const workload = calculateWorkload(employee);
+                return (
+                  <div key={employee.id} className={idx !== employees.length - 1 ? "pb-6 border-b border-slate-100" : ""}>
+                    <div className="flex items-center gap-3.5 mb-3.5">
+                      <div
+                        className="w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0 shadow-md"
+                        style={{
+                          background: `linear-gradient(135deg, ${employee.avatar_color} 0%, ${employee.avatar_color}dd 100%)`,
+                        }}
+                      >
+                        {getInitials(employee.name)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-bold text-slate-900">{employee.name}</div>
+                        <div className="text-sm text-slate-600">
+                          {employee.classification} • {employee.specialisation}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-sm font-semibold text-slate-900 mb-1.5">
+                          {workload.workload} of {employee.capacity}h
+                        </div>
+                        <div className="w-36 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full transition-all"
+                            style={{
+                              width: `${Math.min(workload.percentage, 100)}%`,
+                              background: `linear-gradient(90deg, ${employee.avatar_color} 0%, ${employee.avatar_color}dd 100%)`,
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2.5 mt-3">
+                      <span className="bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 px-2.5 py-1 rounded-lg text-xs font-semibold">
+                        Available
+                      </span>
+                      <span className="text-slate-600 text-xs">
+                        {workload.percentage.toFixed(0)}% capacity utilized
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
-
-        {/* Pending Level 1 Checks Section */}
-        {pendingChecks.length > 0 && (
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                📋 Level 1 Pending Checks ({pendingChecks.length})
-              </h2>
-              <Link
-                href="/check/level1"
-                className="text-[#1C3350] dark:text-blue-400 hover:underline font-semibold"
-              >
-                View all →
-              </Link>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pendingChecks.slice(0, 3).map((check) => (
-                <Link
-                  key={check.id}
-                  href="/check/level1"
-                  className="bg-white dark:bg-gray-700 rounded-lg shadow p-4 border-l-4 border-amber-500 hover:shadow-lg transition"
-                >
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {check.task?.title || 'Task'}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                    {check.task?.client?.name || 'Client'}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    Worker: {check.task?.employee?.name || 'Worker'}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Pending Level 2 Approvals Section */}
-        {pendingLevel2.length > 0 && (
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                ✓ Level 2 Pending Approvals ({pendingLevel2.length})
-              </h2>
-              <Link
-                href="/check/level2"
-                className="text-[#1C3350] dark:text-blue-400 hover:underline font-semibold"
-              >
-                View all →
-              </Link>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pendingLevel2.slice(0, 3).map((approval) => (
-                <Link
-                  key={approval.id}
-                  href="/check/level2"
-                  className="bg-white dark:bg-gray-700 rounded-lg shadow p-4 border-l-4 border-purple-500 hover:shadow-lg transition"
-                >
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {approval.task?.title || 'Task'}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                    {approval.task?.client?.name || 'Client'}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    L1 Checker: {approval.checker.name}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Employee Workload Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {workloads.map((workload) => (
-            <Link
-              key={workload.employee.id}
-              href="/tasks"
-              className={`bg-white dark:bg-gray-700 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-600 hover:shadow-lg transition cursor-pointer ${
-                workload.employee.on_leave ? "opacity-60" : ""
-              }`}
-            >
-              {/* Avatar and Name */}
-              <div className="flex items-start gap-4 mb-4">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
-                  style={{ backgroundColor: workload.employee.avatar_color }}
-                >
-                  {getInitials(workload.employee.name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-gray-900 dark:text-white truncate">
-                    {workload.employee.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 truncate">
-                    {workload.employee.classification}
-                    {workload.employee.specialisation &&
-                      ` · ${workload.employee.specialisation}`}
-                  </p>
-                </div>
-              </div>
-
-              {/* Workload Bar */}
-              <div className="mb-3">
-                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                  <div
-                    className={`h-full transition-all ${getWorkloadColor(
-                      workload.status
-                    )}`}
-                    style={{
-                      width: `${Math.min(workload.percentage, 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Badge and Tasks */}
-              <div className="flex items-center justify-between">
-                <span
-                  className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                    workload.employee.on_leave
-                      ? "bg-blue-100 text-blue-800"
-                      : getWorkloadBadgeColor(workload.status)
-                  }`}
-                >
-                  {getWorkloadLabel(workload.status, workload.employee.on_leave)}
-                </span>
-                <p className="text-xs text-gray-600">
-                  {workload.openTasks} open task{workload.openTasks !== 1 ? "s" : ""}
-                </p>
-              </div>
-
-              {/* Percentage */}
-              <p className="text-xs text-gray-500 mt-2">
-                {workload.percentage.toFixed(0)}% of {workload.employee.capacity}h
-              </p>
-            </Link>
-          ))}
-        </div>
-
       </div>
     </div>
   );

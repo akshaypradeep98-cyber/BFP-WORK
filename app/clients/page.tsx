@@ -2,48 +2,36 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import ClientTable from "./components/ClientTable";
-import ClientModal from "./components/ClientModal";
-
-interface Employee {
-  id: number;
-  name: string;
-  avatar_color: string;
-}
+import NavbarRefined from "@/components/NavbarRefined";
 
 interface Client {
   id: number;
   name: string;
-  type: string;
-  mobile: string;
-  lead_employee_id: number;
-  employees?: Employee;
-  address: string;
-  kmps?: any[];
+  industry: string;
+  lead_id?: number;
+  lead?: string;
+  retainer?: number;
+  status?: string;
 }
 
 export default function ClientsPage() {
   const router = useRouter();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [clients, setClients] = useState<Client[]>([]);
 
-  // Check authentication and fetch data
   useEffect(() => {
     const checkAuthAndFetch = async () => {
-      const employeeName = document.cookie
+      const empId = document.cookie
         .split("; ")
-        .find((row) => row.startsWith("employee_name="));
+        .find((row) => row.startsWith("employee_id="))
+        ?.split("=")[1];
 
-      if (!employeeName) {
+      if (!empId) {
         router.push("/login");
         return;
       }
 
-      await Promise.all([fetchClients(), fetchEmployees()]);
+      await fetchClients();
     };
 
     checkAuthAndFetch();
@@ -62,161 +50,111 @@ export default function ClientsPage() {
     }
   };
 
-  const fetchEmployees = async () => {
+  const handleDeleteClient = async (clientId: number) => {
+    if (!confirm("Are you sure you want to delete this client?")) return;
+
     try {
-      const response = await fetch("/api/employees");
-      if (!response.ok) throw new Error("Failed to fetch employees");
-      const data = await response.json();
-      setEmployees(data);
-    } catch (error) {
-      console.error("Error fetching employees:", error);
-    }
-  };
-
-  const handleAddClick = () => {
-    setSelectedClient(null);
-    setIsModalOpen(true);
-  };
-
-  const handleRowClick = async (client: Client) => {
-    try {
-      const response = await fetch(`/api/clients/${client.id}`);
-      if (!response.ok) throw new Error("Failed to fetch client");
-      const data = await response.json();
-      setSelectedClient(data);
-      setIsModalOpen(true);
-    } catch (error) {
-      console.error("Error fetching client:", error);
-    }
-  };
-
-  const handleSave = async (clientData: any) => {
-    try {
-      const url = selectedClient ? `/api/clients/${selectedClient.id}` : "/api/clients";
-      const method = selectedClient ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(clientData),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to save client");
-      }
-
-      await fetchClients();
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      const response = await fetch(`/api/clients/${id}`, {
+      const response = await fetch(`/api/clients/${clientId}`, {
         method: "DELETE",
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to delete client");
-      }
+      if (!response.ok) throw new Error("Failed to delete client");
 
-      await fetchClients();
+      setClients(clients.filter((c) => c.id !== clientId));
     } catch (error) {
-      throw error;
+      console.error("Error deleting client:", error);
+      alert("Failed to delete client");
     }
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-[#1C3350] text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">BFP Work</h1>
-              <p className="text-sm text-gray-300 mt-1">Client Master</p>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
+      <NavbarRefined />
+
+      <div className="px-11 py-9">
+        <div className="mb-8 flex items-end justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">Clients 💼</h1>
+            <p className="text-slate-600">Accounts you manage and their engagement status</p>
+          </div>
+          <button
+            onClick={() => alert("Add Client functionality coming soon")}
+            className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
+          >
+            + Add Client
+          </button>
+        </div>
+
+        {clients.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-2xl border border-violet-500/6">
+            <p className="text-slate-600 mb-4">No clients yet</p>
             <button
-              onClick={() => router.push("/dashboard")}
-              className="text-white hover:text-gray-300 transition"
+              onClick={() => alert("Add Client functionality coming soon")}
+              className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
             >
-              ← Back to Dashboard
+              + Add Your First Client
             </button>
           </div>
-        </div>
-      </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-sm border border-violet-500/6 overflow-hidden">
+            <div className="grid grid-cols-6 gap-6 px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wide bg-slate-50 border-b border-slate-100">
+              <div>Client</div>
+              <div>Lead</div>
+              <div>Retainer</div>
+              <div>Status</div>
+              <div></div>
+              <div></div>
+            </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Page Title and Actions */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Client Master</h2>
-            <div className="flex gap-2">
-              <button
-                onClick={() => router.push("/clients/export")}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
-              >
-                📥 Export to Excel
-              </button>
-              <button
-                onClick={() => router.push("/clients/import")}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
-              >
-                📤 Import from Excel
-              </button>
-              <button
-                onClick={handleAddClick}
-                className="px-4 py-2 bg-[#1C3350] text-white rounded-lg hover:bg-[#152747] transition font-semibold"
-              >
-                + Add Client
-              </button>
+            <div className="divide-y divide-slate-100">
+              {clients.map((client, idx) => (
+                <div
+                  key={client.id}
+                  className={`grid grid-cols-6 gap-6 px-6 py-4 items-center hover:bg-slate-50 transition ${
+                    idx % 2 === 0 ? "bg-white" : "bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-violet-600 flex items-center justify-center text-white font-bold text-sm">
+                      {client.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm text-slate-900">{client.name}</div>
+                      <div className="text-xs text-slate-600 font-semibold">{client.industry || "N/A"}</div>
+                    </div>
+                  </div>
+                  <div className="font-semibold text-sm text-slate-700">{client.lead || "—"}</div>
+                  <div className="font-semibold text-sm text-slate-700">
+                    {client.retainer ? `₹${client.retainer}` : "—"}
+                  </div>
+                  <div>
+                    <span className="px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-xs font-bold">
+                      • {client.status || "Active"}
+                    </span>
+                  </div>
+                  <div></div>
+                  <div>
+                    <button
+                      onClick={() => handleDeleteClient(client.id)}
+                      className="px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 rounded transition"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* Search Box */}
-          <input
-            type="text"
-            placeholder="Search by client name, type, or mobile..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350] focus:border-transparent"
-          />
-        </div>
-
-        {/* Table */}
-        <div className="bg-white rounded-lg shadow">
-          <ClientTable
-            clients={clients}
-            employees={employees}
-            searchQuery={searchQuery}
-            onRowClick={handleRowClick}
-          />
-        </div>
+        )}
       </div>
-
-      {/* Modal */}
-      <ClientModal
-        isOpen={isModalOpen}
-        client={selectedClient}
-        employees={employees}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSave}
-        onDelete={handleDelete}
-      />
     </div>
   );
 }

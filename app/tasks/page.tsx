@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 import TaskTable from "./components/TaskTable";
 import TaskModal from "./components/TaskModal";
 import WhatsAppNotificationModal from "@/components/WhatsAppNotificationModal";
@@ -52,6 +53,7 @@ export default function TasksPage() {
     assignerName: "",
   });
   const [currentUserName, setCurrentUserName] = useState("");
+  const [userClassification, setUserClassification] = useState<string>("");
 
   // Check authentication and fetch data
   useEffect(() => {
@@ -61,12 +63,18 @@ export default function TasksPage() {
         .find((row) => row.startsWith("employee_name="))
         ?.split("=")[1];
 
+      const classification = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("employee_classification="))
+        ?.split("=")[1];
+
       if (!employeeName) {
         router.push("/login");
         return;
       }
 
       setCurrentUserName(decodeURIComponent(employeeName));
+      setUserClassification(classification || "");
 
       await Promise.all([
         fetchTasks(),
@@ -81,7 +89,24 @@ export default function TasksPage() {
 
   const fetchTasks = async () => {
     try {
-      const response = await fetch("/api/tasks");
+      // Get current user's employee ID
+      const employeeId = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("employee_id="))
+        ?.split("=")[1];
+
+      const classification = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("employee_classification="))
+        ?.split("=")[1];
+
+      // For non-admins, filter by employee_id; for admins, show all
+      const url =
+        classification === "admin"
+          ? "/api/tasks"
+          : `/api/tasks?employee_id=${employeeId}`;
+
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch tasks");
       const data = await response.json();
       setTasks(data);
@@ -126,6 +151,10 @@ export default function TasksPage() {
   };
 
   const handleAddClick = () => {
+    if (userClassification !== "admin") {
+      alert("Only admins can create tasks");
+      return;
+    }
     setIsModalOpen(true);
   };
 
@@ -178,43 +207,32 @@ export default function TasksPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-gray-600 dark:text-gray-400">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <div className="bg-primary-600 dark:bg-primary-800 text-white">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">BFP Work</h1>
-              <p className="text-sm text-gray-300 mt-1">Tasks</p>
-            </div>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="text-white hover:opacity-80 transition"
-            >
-              ← Back to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
+      <NavbarRefined />
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+      <div className="px-11 py-9">
         {/* Page Title and Actions */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">✓ Tasks</h2>
-          <button
-            onClick={handleAddClick}
-            className="px-4 py-2 bg-primary-600 dark:bg-primary-700 text-white rounded-md hover:bg-primary-700 dark:hover:bg-primary-800 transition font-semibold min-h-[44px] whitespace-nowrap w-full sm:w-auto"
-          >
-            + Add Task
-          </button>
+        <div className="mb-8 flex items-end justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">Tasks 📋</h1>
+            <p className="text-slate-600">Track work across every stage of the pipeline</p>
+          </div>
+          {userClassification === "admin" && (
+            <button
+              onClick={handleAddClick}
+              className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
+            >
+              + New Task
+            </button>
+          )}
         </div>
 
         {/* Search Box */}
@@ -223,11 +241,11 @@ export default function TasksPage() {
           placeholder="Search by task title, client, or employee..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-400 dark:bg-gray-700 dark:text-white text-sm"
+          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 mb-6"
         />
 
         {/* Table */}
-        <div className="bg-white dark:bg-gray-700 rounded-md shadow border border-gray-200 dark:border-gray-600 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-violet-500/6 overflow-hidden">
           <TaskTable
             tasks={tasks}
             employees={employees}

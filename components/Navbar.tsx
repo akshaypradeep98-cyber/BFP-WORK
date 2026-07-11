@@ -21,16 +21,18 @@ export default function Navbar() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Determine if current user is admin/staff
-  const [isAdmin, setIsAdmin] = useState(true); // Default to true for now
+  // Determine if current user is admin
+  const [userClassification, setUserClassification] = useState<string>("");
+  const isAdmin = userClassification === "admin";
 
   const navItems: NavItem[] = [
     { label: "Dashboard", href: "/dashboard" },
-    { label: "Employees", href: "/employees" },
+    { label: "Employees", href: "/employees", adminOnly: true },
     { label: "Clients", href: "/clients" },
     { label: "Tasks", href: "/tasks" },
     { label: "Calendar", href: "/calendar" },
     { label: "Leave", href: "/leave" },
+    { label: "Templates", href: "/templates", adminOnly: true },
     { label: "Billing", href: "/billing", adminOnly: true },
     { label: "Reports", href: "/reports", adminOnly: true },
     { label: "Invoices", href: "/invoices", adminOnly: true },
@@ -53,7 +55,12 @@ export default function Navbar() {
       .find((row) => row.startsWith("employee_name="))
       ?.split("=")[1];
 
-    console.log("[Navbar] Cookie found:", !!employeeName, "Value:", employeeName);
+    let classification = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("employee_classification="))
+      ?.split("=")[1];
+
+    console.log("[Navbar] Cookie found:", !!employeeName, "Value:", employeeName, "Classification:", classification);
 
     // If not found, try again after a short delay (sometimes cookies load slowly)
     if (!employeeName) {
@@ -63,13 +70,19 @@ export default function Navbar() {
           .find((row) => row.startsWith("employee_name="))
           ?.split("=")[1];
 
-        console.log("[Navbar] Retry cookie found:", !!retryName, "Value:", retryName);
+        const retryClassification = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("employee_classification="))
+          ?.split("=")[1];
+
+        console.log("[Navbar] Retry cookie found:", !!retryName, "Value:", retryName, "Classification:", retryClassification);
 
         if (retryName) {
           setCurrentUser({
             name: decodeURIComponent(retryName),
             avatarColor: "#1C3350",
           });
+          setUserClassification(retryClassification || "");
         }
       }, 100);
     }
@@ -79,6 +92,7 @@ export default function Navbar() {
         name: decodeURIComponent(employeeName),
         avatarColor: "#1C3350",
       });
+      setUserClassification(classification || "");
     }
 
     setIsLoading(false);
@@ -130,6 +144,7 @@ export default function Navbar() {
   const handleLogout = () => {
     document.cookie = "employee_id=; max-age=0; path=/";
     document.cookie = "employee_name=; max-age=0; path=/";
+    document.cookie = "employee_classification=; max-age=0; path=/";
     router.push("/login");
   };
 

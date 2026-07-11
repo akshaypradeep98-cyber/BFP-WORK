@@ -128,13 +128,21 @@ export async function PUT(
   }
 }
 
-// DELETE client
+// DELETE client (with cascading deletes)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+
+    // First delete KMPs
+    await supabase.from("client_kmp").delete().eq("client_id", id);
+
+    // Then delete tasks associated with this client
+    await supabase.from("tasks").delete().eq("client_id", id);
+
+    // Finally delete the client
     const { error } = await supabase
       .from("clients")
       .delete()

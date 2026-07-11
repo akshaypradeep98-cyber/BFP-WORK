@@ -11,13 +11,20 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// GET all tasks
+// GET all tasks (with optional employee_id filter)
 export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("*")
-      .order("due_date");
+    const { searchParams } = new URL(request.url);
+    const employeeId = searchParams.get("employee_id");
+
+    let query = supabase.from("tasks").select("*");
+
+    // Filter by employee_id if provided
+    if (employeeId) {
+      query = query.eq("employee_id", parseInt(employeeId));
+    }
+
+    const { data, error } = await query.order("due_date");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -37,7 +44,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, client_id, employee_id, division_id, due_date, amount, tax_period } =
+    const { title, client_id, employee_id, division_id, due_date, amount, tax_period, template_id } =
       body;
 
     if (!title) {
@@ -68,23 +75,49 @@ export async function POST(request: NextRequest) {
     }
 
     const taskId = data[0].id;
+    let subtasksData: any[] = [];
 
-    // Auto-generate subtasks based on title
-    const template = getSubtasksForTitle(title);
-    const subtasksData = template.map((st) => ({
-      task_id: taskId,
-      title: st.title,
-      done: false,
-      seconds: 0,
-      sort_order: st.sortOrder,
-    }));
+    // If template_id provided, copy subtasks from template
+    if (template_id) {
+      const { data: templateSubtasks, error: templateError } = await supabase
+        .from("template_subtasks")
+        .select("*")
+        .eq("template_id", template_id)
+        .order("sort_order", { ascending: true });
 
-    const { error: subtaskError } = await supabase
-      .from("subtasks")
-      .insert(subtasksData);
+      if (templateError) {
+        console.error("Error fetching template subtasks:", templateError);
+      } else if (templateSubtasks && templateSubtasks.length > 0) {
+        subtasksData = templateSubtasks.map((st) => ({
+          task_id: taskId,
+          title: st.title,
+          done: false,
+          seconds: 0,
+          notes: st.notes || null,
+          sort_order: st.sort_order,
+        }));
+      }
+    } else {
+      // Fall back to auto-generate based on title
+      const template = getSubtasksForTitle(title);
+      subtasksData = template.map((st) => ({
+        task_id: taskId,
+        title: st.title,
+        done: false,
+        seconds: 0,
+        sort_order: st.sortOrder,
+      }));
+    }
 
-    if (subtaskError) {
-      console.error("Error creating subtasks:", subtaskError);
+    // Insert subtasks if any
+    if (subtasksData.length > 0) {
+      const { error: subtaskError } = await supabase
+        .from("subtasks")
+        .insert(subtasksData);
+
+      if (subtaskError) {
+        console.error("Error creating subtasks:", subtaskError);
+      }
     }
 
     return NextResponse.json(data[0], { status: 201 });
