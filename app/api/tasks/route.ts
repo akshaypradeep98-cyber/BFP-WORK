@@ -54,21 +54,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const insertData: any = {
+      title,
+      client_id: client_id || null,
+      employee_id: employee_id || null,
+      division_id: division_id || null,
+      due_date: due_date || null,
+      amount: amount || 0,
+      tax_period: tax_period || "25-26",
+      status: "todo",
+    };
+
+    // Only include template_id if column exists in database
+    if (template_id) {
+      insertData.template_id = template_id;
+    }
+
     const { data, error } = await supabase
       .from("tasks")
-      .insert([
-        {
-          title,
-          client_id: client_id || null,
-          employee_id: employee_id || null,
-          division_id: division_id || null,
-          due_date: due_date || null,
-          amount: amount || 0,
-          tax_period: tax_period || "25-26",
-          status: "todo",
-          template_id: template_id || null,
-        },
-      ])
+      .insert([insertData])
       .select();
 
     if (error) {
