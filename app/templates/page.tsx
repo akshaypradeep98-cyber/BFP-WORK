@@ -2,13 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import NavbarRefined from "@/components/NavbarRefined";
 
 interface TemplateSubtask {
   id: number;
-  template_id: number;
-  title: string;
-  notes: string | null;
+  text: string;
   sort_order: number;
 }
 
@@ -16,33 +14,30 @@ interface Template {
   id: number;
   name: string;
   category: string;
-  keyword: string | null;
-  subtask_count: number;
+  keyword?: string;
   subtasks?: TemplateSubtask[];
 }
+
+const CATEGORIES = ["GST", "Income Tax", "Companies Act", "Others"];
 
 export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [groupedTemplates, setGroupedTemplates] = useState<Record<string, Template[]>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
-    null
-  );
-  const [showModal, setShowModal] = useState(false);
-  const [showSubtaskModal, setShowSubtaskModal] = useState(false);
-  const [formData, setFormData] = useState({
+  const [userClassification, setUserClassification] = useState("");
+  const [showNewTemplateForm, setShowNewTemplateForm] = useState(false);
+  const [newTemplate, setNewTemplate] = useState({
     name: "",
-    category: "",
+    category: "GST",
     keyword: "",
   });
-  const [newSubtask, setNewSubtask] = useState({
-    title: "",
-    notes: "",
-  });
+  const [expandedTemplate, setExpandedTemplate] = useState<number | null>(null);
+  const [editingSubtasks, setEditingSubtasks] = useState<Record<number, TemplateSubtask[]>>({});
+  const [newSubtaskText, setNewSubtaskText] = useState<Record<number, string>>({});
 
-  // Check auth
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuthAndFetch = async () => {
       const classification = document.cookie
         .split("; ")
         .find((row) => row.startsWith("employee_classification="))
@@ -53,10 +48,11 @@ export default function TemplatesPage() {
         return;
       }
 
+      setUserClassification(classification || "");
       await fetchTemplates();
     };
 
-    checkAuth();
+    checkAuthAndFetch();
   }, [router]);
 
   const fetchTemplates = async () => {
@@ -65,6 +61,18 @@ export default function TemplatesPage() {
       if (!response.ok) throw new Error("Failed to fetch templates");
       const data = await response.json();
       setTemplates(data);
+
+      // Group by category
+      const grouped = data.reduce(
+        (acc: Record<string, Template[]>, template: Template) => {
+          const category = template.category || "Uncategorized";
+          if (!acc[category]) acc[category] = [];
+          acc[category].push(template);
+          return acc;
+        },
+        {}
+      );
+      setGroupedTemplates(grouped);
     } catch (error) {
       console.error("Error fetching templates:", error);
     } finally {
@@ -72,102 +80,48 @@ export default function TemplatesPage() {
     }
   };
 
-  const fetchTemplateSubtasks = async (templateId: number) => {
+  const loadTemplateSubtasks = async (templateId: number) => {
     try {
-      const response = await fetch(
-        `/api/templates/${templateId}/subtasks`
-      );
-      if (!response.ok) throw new Error("Failed to fetch subtasks");
-      const subtasks = await response.json();
-      const template = templates.find((t) => t.id === templateId);
-      if (template) {
-        setSelectedTemplate({ ...template, subtasks });
-      }
+      const response = await fetch(`/api/templates/${templateId}`);
+      if (!response.ok) throw new Error("Failed to fetch template");
+      const data = await response.json();
+      setEditingSubtasks((prev) => ({
+        ...prev,
+        [templateId]: data.subtasks || [],
+      }));
+      setNewSubtaskText((prev) => ({
+        ...prev,
+        [templateId]: "",
+      }));
     } catch (error) {
-      console.error("Error fetching subtasks:", error);
+      console.error("Error loading template subtasks:", error);
     }
   };
 
-  const handleSaveTemplate = async () => {
-    try {
-      if (selectedTemplate) {
-        // Update
-        const response = await fetch(
-          `/api/templates/${selectedTemplate.id}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(formData),
-          }
-        );
-
-        if (!response.ok) throw new Error("Failed to update template");
-        await fetchTemplates();
-      } else {
-        // Create
-        const response = await fetch("/api/templates", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        });
-
-        if (!response.ok) throw new Error("Failed to create template");
-        await fetchTemplates();
-      }
-
-      setShowModal(false);
-      setFormData({ name: "", category: "", keyword: "" });
-      setSelectedTemplate(null);
-    } catch (error) {
-      console.error("Error saving template:", error);
-      alert("Error saving template");
+  const handleCreateTemplate = async () => {
+    if (!newTemplate.name.trim()) {
+      alert("Template name is required");
+      return;
     }
-  };
-
-  const handleAddSubtask = async () => {
-    if (!selectedTemplate || !newSubtask.title.trim()) return;
 
     try {
-      const response = await fetch(
-        `/api/templates/${selectedTemplate.id}/subtasks`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newSubtask),
-        }
-      );
+      const response = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTemplate),
+      });
 
-      if (!response.ok) throw new Error("Failed to add subtask");
-      await fetchTemplateSubtasks(selectedTemplate.id);
-      setNewSubtask({ title: "", notes: "" });
-      setShowSubtaskModal(false);
+      if (!response.ok) throw new Error("Failed to create template");
+      await fetchTemplates();
+      setShowNewTemplateForm(false);
+      setNewTemplate({ name: "", category: "GST", keyword: "" });
     } catch (error) {
-      console.error("Error adding subtask:", error);
-      alert("Error adding subtask");
-    }
-  };
-
-  const handleDeleteSubtask = async (subtaskId: number) => {
-    if (!selectedTemplate) return;
-    if (!confirm("Delete this subtask?")) return;
-
-    try {
-      const response = await fetch(
-        `/api/templates/${selectedTemplate.id}/subtasks/${subtaskId}`,
-        { method: "DELETE" }
-      );
-
-      if (!response.ok) throw new Error("Failed to delete subtask");
-      await fetchTemplateSubtasks(selectedTemplate.id);
-    } catch (error) {
-      console.error("Error deleting subtask:", error);
-      alert("Error deleting subtask");
+      alert("Error creating template: " + error);
     }
   };
 
   const handleDeleteTemplate = async (templateId: number) => {
-    if (!confirm("Delete this template? Tasks created from it will not be affected."))
-      return;
+    if (!confirm("Delete this template? This won't affect existing tasks.")) return;
 
     try {
       const response = await fetch(`/api/templates/${templateId}`, {
@@ -176,308 +130,261 @@ export default function TemplatesPage() {
 
       if (!response.ok) throw new Error("Failed to delete template");
       await fetchTemplates();
-      setSelectedTemplate(null);
     } catch (error) {
-      console.error("Error deleting template:", error);
-      alert("Error deleting template");
+      alert("Error deleting template: " + error);
     }
   };
 
-  const openCreateTemplate = () => {
-    setSelectedTemplate(null);
-    setFormData({ name: "", category: "", keyword: "" });
-    setShowModal(true);
+  const handleAddSubtask = async (templateId: number) => {
+    const text = newSubtaskText[templateId]?.trim();
+    if (!text) {
+      alert("Subtask text is required");
+      return;
+    }
+
+    try {
+      const subtasks = editingSubtasks[templateId] || [];
+      const maxOrder = subtasks.length > 0
+        ? Math.max(...subtasks.map((s) => s.sort_order))
+        : 0;
+
+      const response = await fetch(`/api/templates/${templateId}/subtasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          sort_order: maxOrder + 1,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to add subtask");
+      await loadTemplateSubtasks(templateId);
+    } catch (error) {
+      alert("Error adding subtask: " + error);
+    }
   };
 
-  const openEditTemplate = (template: Template) => {
-    setSelectedTemplate(template);
-    setFormData({
-      name: template.name,
-      category: template.category,
-      keyword: template.keyword || "",
-    });
-    setShowModal(true);
-    fetchTemplateSubtasks(template.id);
+  const handleUpdateSubtask = async (templateId: number, subtaskId: number, newText: string) => {
+    try {
+      const response = await fetch(`/api/templates/${templateId}/subtasks/${subtaskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: newText }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update subtask");
+      await loadTemplateSubtasks(templateId);
+    } catch (error) {
+      alert("Error updating subtask: " + error);
+    }
   };
 
-  const groupedTemplates = templates.reduce(
-    (acc: Record<string, Template[]>, template) => {
-      const category = template.category || "Uncategorized";
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(template);
-      return acc;
-    },
-    {}
-  );
+  const handleDeleteSubtask = async (templateId: number, subtaskId: number) => {
+    try {
+      const response = await fetch(`/api/templates/${templateId}/subtasks/${subtaskId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete subtask");
+      await loadTemplateSubtasks(templateId);
+    } catch (error) {
+      alert("Error deleting subtask: " + error);
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-firm-cream flex items-center justify-center">
-        <div className="text-firm-text">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-firm-cream dark:bg-gray-900">
-      {/* Header */}
-      <div className="bg-firm-900 dark:bg-gray-800 text-white">
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold">Task Templates</h1>
-              <p className="text-sm text-gray-300 mt-1">Manage task templates and subtasks</p>
-            </div>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="text-white hover:text-gray-300 transition"
-            >
-              ← Back to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
+      <NavbarRefined />
 
-      {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-6 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-firm-text dark:text-white">
-            Templates
-          </h2>
+      <div className="px-11 py-9">
+        {/* Header */}
+        <div className="mb-8 flex items-end justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">Templates 📋</h1>
+            <p className="text-slate-600">Manage task templates and subtask libraries</p>
+          </div>
           <button
-            onClick={openCreateTemplate}
-            className="btn-primary px-4 py-2"
+            onClick={() => setShowNewTemplateForm(!showNewTemplateForm)}
+            className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
           >
             + New Template
           </button>
         </div>
 
+        {/* New Template Form */}
+        {showNewTemplateForm && (
+          <div className="bg-white rounded-2xl shadow-sm border border-violet-500/6 p-6 mb-8">
+            <h3 className="text-lg font-bold mb-4">Create New Template</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Template Name *
+                </label>
+                <input
+                  type="text"
+                  value={newTemplate.name}
+                  onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
+                  placeholder="e.g., GSTR-3B Monthly Return"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">
+                    Category *
+                  </label>
+                  <select
+                    value={newTemplate.category}
+                    onChange={(e) => setNewTemplate({ ...newTemplate, category: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">
+                    Keyword (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newTemplate.keyword}
+                    onChange={(e) => setNewTemplate({ ...newTemplate, keyword: e.target.value })}
+                    placeholder="e.g., GSTR3B"
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateTemplate}
+                  className="px-4 py-2 bg-violet-600 text-white text-sm font-semibold rounded-lg hover:bg-violet-700 transition"
+                >
+                  Create Template
+                </button>
+                <button
+                  onClick={() => setShowNewTemplateForm(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Templates by Category */}
-        <div className="space-y-8">
+        <div className="space-y-6">
           {Object.entries(groupedTemplates).map(([category, categoryTemplates]) => (
             <div key={category}>
-              <h3 className="text-lg font-semibold text-firm-900 dark:text-white mb-4 border-b border-firm-border dark:border-gray-700 pb-2">
-                {category}
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <h2 className="text-xl font-bold text-slate-900 mb-4">{category}</h2>
+              <div className="space-y-3">
                 {categoryTemplates.map((template) => (
-                  <div
-                    key={template.id}
-                    className="card p-4 cursor-pointer hover:shadow-lg transition"
-                    onClick={() => openEditTemplate(template)}
-                  >
-                    <div className="flex justify-between items-start">
+                  <div key={template.id} className="bg-white rounded-lg shadow-sm border border-violet-500/6">
+                    {/* Template Header */}
+                    <div
+                      className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition"
+                      onClick={() => {
+                        if (expandedTemplate === template.id) {
+                          setExpandedTemplate(null);
+                        } else {
+                          setExpandedTemplate(template.id);
+                          if (!editingSubtasks[template.id]) {
+                            loadTemplateSubtasks(template.id);
+                          }
+                        }
+                      }}
+                    >
                       <div className="flex-1">
-                        <h4 className="font-semibold text-firm-text dark:text-white">
-                          {template.name}
-                        </h4>
-                        {template.keyword && (
-                          <p className="text-xs text-firm-muted dark:text-gray-400 mt-1">
-                            Keyword: {template.keyword}
-                          </p>
-                        )}
-                        <p className="text-sm text-firm-muted dark:text-gray-400 mt-2">
-                          {template.subtask_count} subtask{template.subtask_count !== 1 ? "s" : ""}
+                        <h3 className="font-semibold text-slate-900">{template.name}</h3>
+                        <p className="text-sm text-slate-500">
+                          {template.keyword && `${template.keyword} • `}
+                          {editingSubtasks[template.id]?.length || 0} subtasks
                         </p>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteTemplate(template.id);
-                        }}
-                        className="text-red-600 hover:text-red-700 text-sm font-medium"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-1 rounded">
+                          {category}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteTemplate(template.id);
+                          }}
+                          className="px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 rounded transition"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Subtasks Editor */}
+                    {expandedTemplate === template.id && (
+                      <div className="border-t border-slate-200 p-4 bg-slate-50">
+                        <div className="space-y-2 mb-4 max-h-40 overflow-y-auto">
+                          {editingSubtasks[template.id]?.map((subtask, idx) => (
+                            <div key={subtask.id} className="flex items-center gap-2 p-2 bg-white rounded border border-slate-200">
+                              <span className="text-xs font-semibold text-slate-600 w-5 h-5 flex items-center justify-center bg-slate-200 rounded-full">
+                                {idx + 1}
+                              </span>
+                              <input
+                                type="text"
+                                value={subtask.text}
+                                onChange={(e) => {
+                                  const updated = [...(editingSubtasks[template.id] || [])];
+                                  updated[idx] = { ...subtask, text: e.target.value };
+                                  setEditingSubtasks({ ...editingSubtasks, [template.id]: updated });
+                                }}
+                                onBlur={() => handleUpdateSubtask(template.id, subtask.id, subtask.text)}
+                                className="flex-1 text-sm px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-violet-500"
+                              />
+                              <button
+                                onClick={() => handleDeleteSubtask(template.id, subtask.id)}
+                                className="text-red-500 hover:text-red-700 font-bold text-lg"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Add Subtask */}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newSubtaskText[template.id] || ""}
+                            onChange={(e) => setNewSubtaskText({ ...newSubtaskText, [template.id]: e.target.value })}
+                            onKeyPress={(e) => e.key === "Enter" && handleAddSubtask(template.id)}
+                            placeholder="Add a new step..."
+                            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                          />
+                          <button
+                            onClick={() => handleAddSubtask(template.id)}
+                            className="px-3 py-2 bg-violet-600 text-white text-sm font-semibold rounded-lg hover:bg-violet-700 transition"
+                          >
+                            + Add
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           ))}
         </div>
-
-        {templates.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-firm-muted dark:text-gray-400">No templates yet</p>
-            <button
-              onClick={openCreateTemplate}
-              className="btn-primary mt-4 px-4 py-2"
-            >
-              Create your first template
-            </button>
-          </div>
-        )}
       </div>
-
-      {/* Template Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="bg-firm-900 dark:bg-gray-700 text-white p-6 sticky top-0">
-              <h2 className="text-2xl font-bold">
-                {selectedTemplate ? "Edit Template" : "Create Template"}
-              </h2>
-            </div>
-
-            {/* Form */}
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-1">
-                  Template Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., ROC Annual Filing"
-                  className="input-base w-full"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-1">
-                  Category *
-                </label>
-                <input
-                  type="text"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  placeholder="e.g., ROC Filing, ITR Filing"
-                  className="input-base w-full"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-1">
-                  Keyword (optional)
-                </label>
-                <input
-                  type="text"
-                  value={formData.keyword}
-                  onChange={(e) => setFormData({ ...formData, keyword: e.target.value })}
-                  placeholder="e.g., AOC-4"
-                  className="input-base w-full"
-                />
-              </div>
-
-              {selectedTemplate && selectedTemplate.subtasks && (
-                <div className="mt-6 pt-6 border-t border-firm-border dark:border-gray-700">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-semibold text-firm-text dark:text-white">
-                      Subtasks ({selectedTemplate.subtasks.length})
-                    </h3>
-                    <button
-                      onClick={() => setShowSubtaskModal(true)}
-                      className="btn-accent text-sm px-3 py-1"
-                    >
-                      + Add
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {selectedTemplate.subtasks.map((subtask, idx) => (
-                      <div
-                        key={subtask.id}
-                        className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 p-3 rounded"
-                      >
-                        <div className="flex-1">
-                          <p className="font-medium text-firm-text dark:text-white text-sm">
-                            {idx + 1}. {subtask.title}
-                          </p>
-                          {subtask.notes && (
-                            <p className="text-xs text-firm-muted dark:text-gray-400">
-                              {subtask.notes}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleDeleteSubtask(subtask.id)}
-                          className="text-red-600 hover:text-red-700 text-xs font-medium ml-2"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="border-t bg-gray-50 dark:bg-gray-700 p-6 flex justify-end gap-3 sticky bottom-0">
-              <button
-                onClick={() => setShowModal(false)}
-                className="btn-secondary px-4 py-2"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveTemplate}
-                className="btn-primary px-4 py-2"
-              >
-                Save Template
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Subtask Modal */}
-      {showSubtaskModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
-            <div className="bg-firm-900 dark:bg-gray-700 text-white p-6">
-              <h3 className="text-lg font-bold">Add Subtask</h3>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-1">
-                  Subtask Title *
-                </label>
-                <input
-                  type="text"
-                  value={newSubtask.title}
-                  onChange={(e) => setNewSubtask({ ...newSubtask, title: e.target.value })}
-                  placeholder="e.g., Prepare documents"
-                  className="input-base w-full"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-firm-text dark:text-gray-200 mb-1">
-                  Notes (optional)
-                </label>
-                <textarea
-                  value={newSubtask.notes}
-                  onChange={(e) => setNewSubtask({ ...newSubtask, notes: e.target.value })}
-                  placeholder="Additional notes..."
-                  className="input-base w-full resize-none"
-                  rows={3}
-                />
-              </div>
-            </div>
-
-            <div className="border-t bg-gray-50 dark:bg-gray-700 p-6 flex justify-end gap-3">
-              <button
-                onClick={() => setShowSubtaskModal(false)}
-                className="btn-secondary px-4 py-2 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddSubtask}
-                className="btn-primary px-4 py-2 text-sm"
-              >
-                Add Subtask
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

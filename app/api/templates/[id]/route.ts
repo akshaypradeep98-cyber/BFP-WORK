@@ -10,6 +10,47 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// GET single template with subtasks
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    const { data: template, error: templateError } = await supabase
+      .from("task_templates")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (templateError) {
+      return NextResponse.json({ error: templateError.message }, { status: 500 });
+    }
+
+    const { data: subtasks, error: subtasksError } = await supabase
+      .from("template_subtasks")
+      .select("*")
+      .eq("template_id", id)
+      .order("sort_order", { ascending: true });
+
+    if (subtasksError) {
+      return NextResponse.json({ error: subtasksError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      ...template,
+      subtasks: subtasks || [],
+    });
+  } catch (error) {
+    console.error("Error fetching template:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch template" },
+      { status: 500 }
+    );
+  }
+}
+
 // PUT update template
 export async function PUT(
   request: NextRequest,

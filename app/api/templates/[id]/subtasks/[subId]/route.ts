@@ -18,15 +18,18 @@ export async function PUT(
   try {
     const { id, subId } = await params;
     const body = await request.json();
-    const { title, notes, sort_order } = body;
+    // Support both "text" and "title" fields
+    const text = body.text || body.title;
+    const { notes, sort_order } = body;
+
+    const updateData: any = {};
+    if (text !== undefined) updateData.text = text;
+    if (notes !== undefined) updateData.notes = notes;
+    if (sort_order !== undefined) updateData.sort_order = sort_order;
 
     const { data, error } = await supabase
       .from("template_subtasks")
-      .update({
-        title: title || undefined,
-        notes: notes !== undefined ? notes : undefined,
-        sort_order: sort_order !== undefined ? sort_order : undefined,
-      })
+      .update(updateData)
       .eq("id", subId)
       .eq("template_id", id)
       .select()

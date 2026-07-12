@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, client_id, employee_id, division_id, due_date, amount, tax_period, template_id } =
+    const { title, client_id, employee_id, division_id, due_date, amount, tax_period, template_id, subtasks } =
       body;
 
     if (!title) {
@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
           amount: amount || 0,
           tax_period: tax_period || "25-26",
           status: "todo",
+          template_id: template_id || null,
         },
       ])
       .select();
@@ -77,8 +78,19 @@ export async function POST(request: NextRequest) {
     const taskId = data[0].id;
     let subtasksData: any[] = [];
 
-    // If template_id provided, copy subtasks from template
-    if (template_id) {
+    // If subtasks array provided from modal preview, use those
+    if (subtasks && Array.isArray(subtasks) && subtasks.length > 0) {
+      subtasksData = subtasks.map((st: any) => ({
+        task_id: taskId,
+        text: st.text,
+        done: false,
+        seconds: 0,
+        notes: null,
+        sort_order: st.sort_order,
+      }));
+    }
+    // Otherwise if template_id provided, fetch from template
+    else if (template_id) {
       const { data: templateSubtasks, error: templateError } = await supabase
         .from("template_subtasks")
         .select("*")
@@ -90,7 +102,7 @@ export async function POST(request: NextRequest) {
       } else if (templateSubtasks && templateSubtasks.length > 0) {
         subtasksData = templateSubtasks.map((st) => ({
           task_id: taskId,
-          title: st.title,
+          text: st.text,
           done: false,
           seconds: 0,
           notes: st.notes || null,
@@ -102,7 +114,7 @@ export async function POST(request: NextRequest) {
       const template = getSubtasksForTitle(title);
       subtasksData = template.map((st) => ({
         task_id: taskId,
-        title: st.title,
+        text: st.title,
         done: false,
         seconds: 0,
         sort_order: st.sortOrder,

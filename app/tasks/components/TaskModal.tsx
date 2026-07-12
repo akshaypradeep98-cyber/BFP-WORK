@@ -24,6 +24,13 @@ interface Template {
   keyword: string | null;
 }
 
+interface TemplateSubtask {
+  id?: number;
+  text: string;
+  sort_order: number;
+  isNew?: boolean;
+}
+
 interface TaskModalProps {
   isOpen: boolean;
   employees: Employee[];
@@ -54,6 +61,8 @@ export default function TaskModal({
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [groupedTemplates, setGroupedTemplates] = useState<Record<string, Template[]>>({});
+  const [previewSubtasks, setPreviewSubtasks] = useState<TemplateSubtask[]>([]);
+  const [newSubtaskText, setNewSubtaskText] = useState("");
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -72,6 +81,8 @@ export default function TaskModal({
         tax_period: "25-26",
         template_id: "",
       });
+      setPreviewSubtasks([]);
+      setNewSubtaskText("");
       setError("");
     }
   }, [isOpen]);
@@ -99,6 +110,64 @@ export default function TaskModal({
     }
   };
 
+  const fetchTemplateSubtasks = async (templateId: number) => {
+    try {
+      const response = await fetch(`/api/templates/${templateId}`);
+      if (!response.ok) throw new Error("Failed to fetch template subtasks");
+      const data = await response.json();
+      setPreviewSubtasks(data.subtasks || []);
+    } catch (error) {
+      console.error("Error fetching template subtasks:", error);
+      setPreviewSubtasks([]);
+    }
+  };
+
+  const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const templateId = e.target.value;
+    setFormData({ ...formData, template_id: templateId });
+    setNewSubtaskText("");
+
+    if (templateId) {
+      const selected = templates.find((t) => t.id === parseInt(templateId));
+      if (selected) {
+        setFormData((prev) => ({
+          ...prev,
+          title: selected.name,
+        }));
+        fetchTemplateSubtasks(parseInt(templateId));
+      }
+    } else {
+      setPreviewSubtasks([]);
+    }
+  };
+
+  const addPreviewSubtask = () => {
+    if (newSubtaskText.trim()) {
+      const maxOrder = previewSubtasks.length > 0
+        ? Math.max(...previewSubtasks.map((s) => s.sort_order))
+        : 0;
+      setPreviewSubtasks([
+        ...previewSubtasks,
+        {
+          text: newSubtaskText,
+          sort_order: maxOrder + 1,
+          isNew: true,
+        },
+      ]);
+      setNewSubtaskText("");
+    }
+  };
+
+  const deletePreviewSubtask = (index: number) => {
+    setPreviewSubtasks(previewSubtasks.filter((_, i) => i !== index));
+  };
+
+  const updatePreviewSubtask = (index: number, newText: string) => {
+    const updated = [...previewSubtasks];
+    updated[index].text = newText;
+    setPreviewSubtasks(updated);
+  };
+
   const handleSave = async () => {
     setError("");
 
@@ -109,8 +178,12 @@ export default function TaskModal({
 
     setIsSaving(true);
     try {
+      const taskTitle = formData.template_id
+        ? `${formData.title} - ${formData.tax_period}`
+        : formData.title;
+
       await onSave({
-        title: formData.title,
+        title: taskTitle,
         client_id: formData.client_id ? parseInt(formData.client_id) : null,
         employee_id: formData.employee_id
           ? parseInt(formData.employee_id)
@@ -122,6 +195,7 @@ export default function TaskModal({
         amount: formData.amount ? parseInt(formData.amount) : 0,
         tax_period: formData.tax_period,
         template_id: formData.template_id ? parseInt(formData.template_id) : null,
+        subtasks: previewSubtasks,
       });
       onClose();
     } catch (err: any) {
@@ -161,21 +235,7 @@ export default function TaskModal({
             </label>
             <select
               value={formData.template_id}
-              onChange={(e) => {
-                setFormData({ ...formData, template_id: e.target.value });
-                // Auto-fill title if template selected
-                if (e.target.value) {
-                  const selected = templates.find(
-                    (t) => t.id === parseInt(e.target.value)
-                  );
-                  if (selected) {
-                    setFormData((prev) => ({
-                      ...prev,
-                      title: selected.name,
-                    }));
-                  }
-                }
-              }}
+              onChange={handleTemplateChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350]"
             >
               <option value="">Custom / Blank</option>
@@ -190,6 +250,54 @@ export default function TaskModal({
                 </optgroup>
               ))}
             </select>
+          </div>
+
+          {/* Subtask Preview */}
+          {previewSubtasks.length > 0 && (
+            <div className="border-t pt-4 mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Template Subtasks Preview
+              </label>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {previewSubtasks.map((subtask, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                    <span className="text-sm font-semibold text-gray-600 w-5 h-5 flex items-center justify-center bg-gray-300 rounded-full">
+                      {idx + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={subtask.text}
+                      onChange={(e) => updatePreviewSubtask(idx, e.target.value)}
+                      className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#1C3350]"
+                    />
+                    <button
+                      onClick={() => deletePreviewSubtask(idx)}
+                      className="text-red-500 hover:text-red-700 font-bold text-lg"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Add Subtask Input */}
+          <div className="flex gap-2 items-center">
+            <input
+              type="text"
+              value={newSubtaskText}
+              onChange={(e) => setNewSubtaskText(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && addPreviewSubtask()}
+              placeholder={previewSubtasks.length > 0 ? "Add a new step..." : "Add step (template or custom)"}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1C3350]"
+            />
+            <button
+              onClick={addPreviewSubtask}
+              className="px-3 py-2 bg-[#1C3350] text-white text-sm font-medium rounded-lg hover:bg-[#152747] transition"
+            >
+              + Add
+            </button>
           </div>
 
           <div>

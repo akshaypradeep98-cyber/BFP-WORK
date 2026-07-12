@@ -46,33 +46,38 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, notes } = body;
+    // Support both "text" and "title" fields
+    const text = body.text || body.title;
+    const { notes, sort_order } = body;
 
-    if (!title) {
+    if (!text) {
       return NextResponse.json(
-        { error: "Title is required" },
+        { error: "Text is required" },
         { status: 400 }
       );
     }
 
-    // Get max sort_order for this template
-    const { data: maxData } = await supabase
-      .from("template_subtasks")
-      .select("sort_order")
-      .eq("template_id", id)
-      .order("sort_order", { ascending: false })
-      .limit(1);
+    // If sort_order not provided, get max sort_order for this template
+    let finalSortOrder = sort_order;
+    if (finalSortOrder === undefined) {
+      const { data: maxData } = await supabase
+        .from("template_subtasks")
+        .select("sort_order")
+        .eq("template_id", id)
+        .order("sort_order", { ascending: false })
+        .limit(1);
 
-    const nextSortOrder = (maxData && maxData[0]?.sort_order + 1) || 1;
+      finalSortOrder = (maxData && maxData[0]?.sort_order + 1) || 1;
+    }
 
     const { data, error } = await supabase
       .from("template_subtasks")
       .insert([
         {
           template_id: id,
-          title,
+          text,
           notes: notes || null,
-          sort_order: nextSortOrder,
+          sort_order: finalSortOrder,
         },
       ])
       .select()
