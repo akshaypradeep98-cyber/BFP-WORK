@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { hashPassword } from "@/lib/auth";
+import { createRequestClient } from "@/lib/supabase/server";
+import { hashPassword, omitPasswordHash } from "@/lib/auth";
 import { getRandomAvatarColor } from "@/lib/utils";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET all employees
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const { data, error } = await supabase
       .from("employees")
       .select("*")
@@ -24,7 +17,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json(data.map(omitPasswordHash));
   } catch (error) {
     console.error("Error fetching employees:", error);
     return NextResponse.json(
@@ -37,6 +30,7 @@ export async function GET(request: NextRequest) {
 // POST create new employee
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const body = await request.json();
     const {
       name,
@@ -102,7 +96,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data[0], { status: 201 });
+    return NextResponse.json(omitPasswordHash(data[0]), { status: 201 });
   } catch (error) {
     console.error("Error creating employee:", error);
     return NextResponse.json(

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 
 export default function ClientExportPage() {
   const router = useRouter();
@@ -90,6 +91,7 @@ export default function ClientExportPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <NavbarRefined />
       {/* Header */}
       <div className="bg-[#1C3350] text-white">
         <div className="max-w-4xl mx-auto px-4 py-6">
@@ -119,7 +121,7 @@ export default function ClientExportPage() {
                 Total Clients: <span className="text-blue-600">{clientCount.toLocaleString()}</span>
               </p>
               <p className="text-gray-600 text-sm mt-2">
-                All client information including names, contact details, key managerial persons, and associated documents
+                All client information including names, contact details, and key managerial persons
               </p>
             </div>
 
@@ -161,9 +163,7 @@ export default function ClientExportPage() {
               <li>• <span className="font-medium">Type</span> - Business type (Pvt Ltd, LLP, etc.)</li>
               <li>• <span className="font-medium">Mobile</span> - Contact phone number</li>
               <li>• <span className="font-medium">Address</span> - Business address</li>
-              <li>• <span className="font-medium">Lead Employee</span> - Assigned account manager</li>
               <li>• <span className="font-medium">KMP</span> - Key Managerial Persons (Name|Designation|Mobile)</li>
-              <li>• <span className="font-medium">Documents</span> - Associated documents</li>
             </ul>
           </div>
         </div>

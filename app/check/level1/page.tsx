@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 
 interface Subtask {
   id: number;
@@ -92,7 +93,7 @@ export default function Level1CheckPage() {
         }
 
         // Get employees for reassignment
-        const empResponse = await fetch("/api/employees");
+        const empResponse = await fetch("/api/employees/directory");
         if (empResponse.ok) {
           const empData = await empResponse.json();
           setEmployees(empData || []);
@@ -140,11 +141,13 @@ export default function Level1CheckPage() {
             setClient(clientData);
           }
 
-          // Get worker
-          const workerRes = await fetch(`/api/employees/${checkData.task.employee_id}`);
-          if (workerRes.ok) {
-            const workerData = await workerRes.json();
-            setWorker(workerData);
+          // Get worker (name only, via the directory — RLS limits
+          // GET /api/employees/:id to admin/manager or the employee's own row)
+          const directoryRes = await fetch("/api/employees/directory");
+          if (directoryRes.ok) {
+            const directory: Employee[] = await directoryRes.json();
+            const workerEntry = directory.find((e) => e.id === checkData.task.employee_id);
+            if (workerEntry) setWorker(workerEntry);
           }
         }
 
@@ -351,6 +354,7 @@ export default function Level1CheckPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <NavbarRefined />
       {/* Header */}
       <div className="bg-[#1C3350] text-white">
         <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">

@@ -72,34 +72,40 @@ export function getNavLinks(classification: Classification) {
   const baseLinks = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/tasks", label: "Tasks" },
+    { href: "/check/level1", label: "Check L1" },
+    { href: "/calendar", label: "Calendar" },
+    { href: "/appointments", label: "Appointments" },
     { href: "/leave", label: "Leave" },
     { href: "/attendance", label: "Attendance" },
   ];
 
+  const managerLinks = [
+    { href: "/check/level2", label: "Check L2" },
+    { href: "/manager/appointments", label: "Approvals" },
+  ];
+
+  const adminLinks = [
+    { href: "/templates", label: "Templates" },
+    { href: "/clients", label: "Clients" },
+    { href: "/employees", label: "Employees" },
+    { href: "/invoices", label: "Invoices" },
+    { href: "/billing", label: "Billing" },
+    { href: "/reports", label: "Reports" },
+    { href: "/dsc", label: "DSC" },
+    { href: "/activity", label: "Activity" },
+  ];
+
   if (classification === "admin") {
-    return [
-      ...baseLinks,
-      { href: "/employees", label: "Employees" },
-      { href: "/clients", label: "Clients" },
-      { href: "/calendar", label: "Calendar" },
-      { href: "/invoices", label: "Invoices" },
-      { href: "/billing", label: "Billing" },
-      { href: "/reports", label: "Reports" },
-      { href: "/dsc", label: "DSC" },
-      { href: "/activity", label: "Activity" },
-    ];
+    return [...baseLinks, ...managerLinks, ...adminLinks];
   }
 
   if (classification === "manager") {
-    return [
-      ...baseLinks,
-      { href: "/calendar", label: "Calendar" },
-    ];
+    return [...baseLinks, ...managerLinks];
   }
 
-  // article and staff get minimal access
   return baseLinks;
 }
+
 
 // Get display name for classification
 export function getClassificationLabel(classification: Classification): string {
@@ -110,4 +116,11 @@ export function getClassificationLabel(classification: Classification): string {
     staff: "Staff",
   };
   return labels[classification];
+}
+
+// Strip the bcrypt hash before an employee row leaves the server
+export function omitPasswordHash<T extends { password_hash?: unknown }>(row: T): Omit<T, "password_hash"> {
+  const copy = { ...row };
+  delete copy.password_hash;
+  return copy;
 }

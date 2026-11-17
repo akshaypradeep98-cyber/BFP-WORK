@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { hashPassword } from "@/lib/auth";
+import { createRequestClient } from "@/lib/supabase/server";
+import { hashPassword, omitPasswordHash } from "@/lib/auth";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET single employee
 export async function GET(
@@ -17,6 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
 
     const { data, error } = await supabase
@@ -29,7 +22,7 @@ export async function GET(
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json(omitPasswordHash(data));
   } catch (error) {
     console.error("Error fetching employee:", error);
     return NextResponse.json(
@@ -45,6 +38,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
     const body = await request.json();
     const {
@@ -110,7 +104,7 @@ export async function PUT(
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
-    return NextResponse.json(data[0]);
+    return NextResponse.json(omitPasswordHash(data[0]));
   } catch (error) {
     console.error("Error updating employee:", error);
     return NextResponse.json(
@@ -126,6 +120,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
 
     const { error } = await supabase.from("employees").delete().eq("id", id);

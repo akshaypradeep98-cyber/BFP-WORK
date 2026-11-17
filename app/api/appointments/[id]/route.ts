@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { withScheduledParts } from "@/lib/appointments";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -32,10 +33,8 @@ export async function PUT(
       const { data: apt, error } = await supabase
         .from("appointments")
         .update({
-          appointment_date,
-          appointment_time,
+          scheduled_at: `${appointment_date}T${appointment_time}`,
           status: "confirmed",
-          updated_at: new Date().toISOString(),
         })
         .eq("id", id)
         .select();
@@ -45,7 +44,7 @@ export async function PUT(
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json(apt[0]);
+      return NextResponse.json(withScheduledParts(apt[0]));
     }
 
     if (action === "accept") {
@@ -54,7 +53,6 @@ export async function PUT(
         .from("appointments")
         .update({
           status: "accepted",
-          updated_at: new Date().toISOString(),
         })
         .eq("id", id)
         .select();
@@ -64,7 +62,7 @@ export async function PUT(
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json(apt[0]);
+      return NextResponse.json(withScheduledParts(apt[0]));
     }
 
     if (action === "decline") {
@@ -73,7 +71,6 @@ export async function PUT(
         .from("appointments")
         .update({
           status: "declined",
-          updated_at: new Date().toISOString(),
         })
         .eq("id", id)
         .select();
@@ -83,7 +80,7 @@ export async function PUT(
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json(apt[0]);
+      return NextResponse.json(withScheduledParts(apt[0]));
     }
 
     if (action === "complete") {
@@ -92,7 +89,7 @@ export async function PUT(
         .from("appointments")
         .update({
           status: "completed",
-          updated_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
         })
         .eq("id", id)
         .select();
@@ -102,7 +99,7 @@ export async function PUT(
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json(apt[0]);
+      return NextResponse.json(withScheduledParts(apt[0]));
     }
 
     return NextResponse.json(

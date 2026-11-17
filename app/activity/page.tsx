@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 
 interface ActivityLog {
   id: number;
@@ -69,6 +70,7 @@ export default function ActivityLogPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <NavbarRefined />
       {/* Header */}
       <div className="bg-[#1C3350] text-white">
         <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">

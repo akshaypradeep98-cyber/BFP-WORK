@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 
 interface PendingApproval {
   id: number;
@@ -80,7 +81,7 @@ export default function Level2ApprovalsPage() {
           setPendingApprovals(await response.json());
         }
 
-        const empResponse = await fetch("/api/employees");
+        const empResponse = await fetch("/api/employees/directory");
         if (empResponse.ok) {
           setEmployees(await empResponse.json());
         }
@@ -252,6 +253,7 @@ export default function Level2ApprovalsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <NavbarRefined />
       {/* Header */}
       <div className="bg-[#1C3350] text-white">
         <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 import Link from "next/link";
 import SubtaskChecklist from "./components/SubtaskChecklist";
 import PaymentsPanel from "./components/PaymentsPanel";
@@ -11,7 +12,7 @@ import { formatTime, getTotalTimeSeconds } from "@/lib/taskTemplates";
 interface Employee {
   id: number;
   name: string;
-  avatar_color: string;
+  avatar_color?: string;
 }
 
 interface Client {
@@ -162,7 +163,7 @@ export default function TaskDetailPage() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch("/api/employees");
+      const response = await fetch("/api/employees/directory");
       if (!response.ok) throw new Error("Failed to fetch employees");
       const data = await response.json();
       setEmployees(data);
@@ -463,6 +464,7 @@ export default function TaskDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <NavbarRefined />
       {/* Header */}
       <div className="bg-primary-600 dark:bg-primary-800 text-white">
         <div className="max-w-4xl mx-auto px-4 py-6">
@@ -511,7 +513,7 @@ export default function TaskDetailPage() {
                 <div className="flex items-center gap-2">
                   <div
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold"
-                    style={{ backgroundColor: employee.avatar_color }}
+                    style={{ backgroundColor: employee.avatar_color || "#6366f1" }}
                   >
                     {getInitials(employee.name)}
                   </div>

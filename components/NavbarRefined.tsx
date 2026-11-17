@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUserFromCookies, getNavLinks } from "@/lib/auth";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 interface NavLink {
   label: string;
@@ -41,7 +42,8 @@ export default function NavbarRefined() {
     return null;
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await createBrowserSupabaseClient().auth.signOut();
     document.cookie = "employee_id=; max-age=0; path=/";
     document.cookie = "employee_name=; max-age=0; path=/";
     document.cookie = "employee_classification=; max-age=0; path=/";
@@ -56,19 +58,7 @@ export default function NavbarRefined() {
       .toUpperCase();
   };
 
-  const allTabs = [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Employees", href: "/employees" },
-    { label: "Clients", href: "/clients" },
-    { label: "Tasks", href: "/tasks" },
-    { label: "Calendar", href: "/calendar" },
-    { label: "Leave", href: "/leave" },
-    { label: "Billing", href: "/billing" },
-    { label: "Reports", href: "/reports" },
-    { label: "Attendance", href: "/attendance" },
-  ];
-
-  const visibleTabs = navLinks.length > 0 ? navLinks : allTabs;
+  const visibleTabs = navLinks;
 
   return (
     <nav className="bg-white/85 backdrop-blur-lg border-b border-violet-500/12 sticky top-0 z-50">
@@ -84,9 +74,9 @@ export default function NavbarRefined() {
         </Link>
 
         {/* Tabs */}
-        <div className="flex gap-0.5 flex-1">
+        <div className="flex flex-wrap gap-0.5 flex-1">
           {visibleTabs.map((tab) => {
-            const isActive = pathname === tab.href || pathname.startsWith(tab.href);
+            const isActive = pathname === tab.href || pathname.startsWith(tab.href + "/");
             return (
               <Link
                 key={tab.href}

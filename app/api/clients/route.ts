@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { createRequestClient } from "@/lib/supabase/server";
 
 // GET all clients
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const { data, error } = await supabase
       .from("clients")
       .select("*")
@@ -22,7 +14,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data);
+    const clientIds = (data || []).map((c: any) => c.id);
+    const kmpByClient = new Map<number, string[]>();
+    if (clientIds.length > 0) {
+      const { data: kmps } = await supabase
+        .from("client_kmp")
+        .select("client_id, name")
+        .in("client_id", clientIds);
+
+      (kmps || []).forEach((kmp: any) => {
+        if (!kmpByClient.has(kmp.client_id)) kmpByClient.set(kmp.client_id, []);
+        kmpByClient.get(kmp.client_id)!.push(kmp.name);
+      });
+    }
+
+    const enriched = (data || []).map((c: any) => ({
+      ...c,
+      kmp_names: kmpByClient.get(c.id) || [],
+    }));
+
+    return NextResponse.json(enriched);
   } catch (error) {
     console.error("Error fetching clients:", error);
     return NextResponse.json(
@@ -35,8 +46,9 @@ export async function GET(request: NextRequest) {
 // POST create new client
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const body = await request.json();
-    const { name, type, mobile, lead_employee_id, address, kmps } = body;
+    const { name, type, mobile, address, kmps } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -53,7 +65,6 @@ export async function POST(request: NextRequest) {
           name,
           type: type || null,
           mobile: mobile || null,
-          lead_employee_id: lead_employee_id || null,
           address: address || null,
         },
       ])

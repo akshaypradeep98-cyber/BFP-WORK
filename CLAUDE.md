@@ -25,16 +25,21 @@ Web-based practice management system for Chartered Accountant (CA) firms. Handle
 - `task_templates` — template master: name, category, keyword
 - `template_subtasks` — template subtask library: template_id, text, sort_order
 - `tasks` — work tasks: title, client_id, employee_id, status, template_id
-- `subtasks` — task items: task_id, text, done, seconds, notes, sort_order
-- `task_checks` — checking records: task_id, check_level, checker_id, status
-- `subtask_verifications`, `appointments`, `clients`, `divisions`, `payments`, `dsc_register`, `activity_log`, `leave_requests`, `attendance`
+- `subtasks` — task items: task_id, title, done, seconds, notes, sort_order, last_logged
+- `task_checks` — checking records: task_id, check_level, checker_id, status, notes (no updated_at column)
+- `subtask_verifications` — subtask_id, check_id, verified, verified_at
+- `appointments` — task_id, employee_id, manager_id, check_type, status, scheduled_at, completed_at (API maps scheduled_at to appointment_date/appointment_time)
+- `clients`, `client_kmp`, `divisions`, `payments`, `dsc_register`, `activity_log`, `leave_requests`, `attendance`
+- Full reference that matches the live project: `DATABASE_SCHEMA.sql`. The other `*_SETUP.sql` files are historical and partly out of date.
 
 ## Role-Based Access
 - **Admin**: full access — create tasks, manage templates, approve checks, all pages
 - **Manager**: team oversight, Level 2 approvals, appointments, leave approval — CANNOT create tasks
 - **Article/Staff**: own tasks only, can do Level 1 checks
-- Admin-only pages (`/templates`, `/employees`, `/billing`, `/reports`) redirect non-admins to `/dashboard`
-- Navbar links filtered by classification; middleware checks `employee_id` cookie
+- Admin-only pages (`/templates`, `/employees`, `/billing`, `/reports`, `/invoices`, `/dsc`, `/activity`) redirect non-admins to `/dashboard`; `/check/level2` and `/manager/*` need manager or admin
+- `middleware.ts` enforces this server-side on every page and API route (401/403 for APIs, redirect for pages). It deliberately has NO `config.matcher` export: Next 15.5 silently skipped the middleware when one was present, so static paths are filtered inside the function.
+- Navbar links come from `getNavLinks()` in `lib/auth.ts` and are rendered by `components/NavbarRefined.tsx` on every page
+- Employee API responses never include `password_hash` (`omitPasswordHash()` in `lib/auth.ts`)
 
 ## Key Architecture Decisions
 1. **Template immutability**: Creating a task from a template COPIES subtasks into the `subtasks` table. Template edits never affect existing tasks.
@@ -50,15 +55,19 @@ Web-based practice management system for Chartered Accountant (CA) firms. Handle
   /api/tasks/                — task creation (copies template subtasks)
   /api/employees/, /clients/, /checks/, ...
   /login, /dashboard, /tasks, /templates (admin), /employees (admin), ...
+  /tasks/components/TaskModal.tsx            — task creation with template dropdown
+  /tasks/[id]/components/SubtaskChecklist.tsx — live subtask editing
+  /employees/components/EmployeeModal.tsx    — employee CRUD, password visibility toggle
 /components
-  Navbar.tsx                 — role-based link filtering
-  TaskModal.tsx              — task creation with template dropdown
-  EmployeeModal.tsx          — employee CRUD, password visibility toggle
-  SubtaskChecklist.tsx       — live subtask editing
+  NavbarRefined.tsx          — global navbar, links from getNavLinks()
+  WhatsAppNotificationModal.tsx
 /lib
-  auth.ts                    — permissions, getNavLinks(), hashPassword()
+  auth.ts                    — permissions, getNavLinks(), hashPassword(), omitPasswordHash()
+  appointments.ts            — scheduled_at <-> appointment_date/time mapping
   utils.ts                   — CLASSIFICATIONS, formatDate, getInitials
-  taskTemplates.ts           — template subtask fetching
+  taskTemplates.ts           — keyword-based fallback checklists when no template is chosen
+middleware.ts                — auth + role enforcement for pages and APIs
+DATABASE_SCHEMA.sql          — consolidated schema (matches live Supabase)
 ```
 
 ## Task Workflow
@@ -74,7 +83,9 @@ Web-based practice management system for Chartered Accountant (CA) firms. Handle
 - **DB naming**: tables lowercase_plural, columns snake_case, FKs `{table_singular}_id`
 
 ## Common Tasks
-**Add admin-only page**: create `/app/newpage/page.tsx`, add useEffect classification check (redirect non-admin to `/dashboard`), add to navbar `navItems` with `adminOnly: true`, add to `middleware.ts` protected routes.
+**Add admin-only page**: create `/app/newpage/page.tsx` rendering `<NavbarRefined />`, add its path to `ADMIN_PAGES` in `middleware.ts`, and add the link to `adminLinks` in `getNavLinks()` (`lib/auth.ts`). Admin-only API writes go in `ADMIN_WRITE_APIS`.
+
+**Seed a fresh Supabase project**: run `DATABASE_SCHEMA.sql`, then `SEED_TEMPLATES.sql`, then create users via `/employees` as admin (or `scripts/generate-password-hashes.js` for SQL inserts).
 
 **Create template**: as admin → `/templates` → "+ New Template" → name/category/keyword → add subtasks → save.
 
@@ -91,7 +102,7 @@ Never commit `.env.local`.
 
 ## Commands
 ```
-npm run dev      # dev server (localhost:3000 or 3002)
+npm run dev -- -p 3002   # port 3000 is usually held by an unrelated Docker project on this machine
 npm run build    # production build
 npm run lint     # ESLint
 ```
@@ -114,4 +125,4 @@ npm run lint     # ESLint
 4. Test access control: kaarthik on `/templates` should redirect to `/dashboard`
 
 ---
-**Last Updated**: July 11, 2026 · **Version**: 1.0 (Production Ready)
+**Last Updated**: November 16, 2026 · **Version**: 1.1 (full audit; see git log)

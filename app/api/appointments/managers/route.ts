@@ -1,22 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// GET available managers (employees with Manager/Senior/Partner classification)
+// GET available managers (employees with manager or admin classification)
 export async function GET(request: NextRequest) {
   try {
-    const { data: employees, error } = await supabase
+    const supabase = await createRequestClient();
+    // Any employee booking an appointment needs to see who the managers
+    // are, which RLS wouldn't otherwise allow a non-admin/manager caller
+    // to query — this is a deliberately narrow admin-client lookup.
+    const { data: employees, error } = await createAdminClient()
       .from("employees")
       .select("id, name, classification")
-      .in("classification", ["Manager", "Senior", "Partner"])
+      .in("classification", ["manager", "admin"])
       .order("name");
 
     if (error) {

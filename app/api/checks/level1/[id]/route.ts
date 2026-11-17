@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
 
     const { data: check, error } = await supabase
@@ -43,15 +36,19 @@ export async function GET(
       .eq("id", task?.client_id)
       .single();
 
-    const { data: worker } = await supabase
+    // Name-only lookups: the worker/checker may not be the caller or an
+    // admin/manager, so these deliberately use the admin client rather
+    // than the request-scoped one RLS would otherwise block them on.
+    const admin = createAdminClient();
+    const { data: worker } = await admin
       .from("employees")
-      .select("*")
+      .select("id, name")
       .eq("id", task?.employee_id)
       .single();
 
-    const { data: checker } = await supabase
+    const { data: checker } = await admin
       .from("employees")
-      .select("*")
+      .select("id, name")
       .eq("id", check.checker_id)
       .single();
 
@@ -78,13 +75,14 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
     const { action, notes, new_checker_id } = await request.json();
 
     if (action === "save_notes") {
       const { error } = await supabase
         .from("task_checks")
-        .update({ notes, updated_at: new Date().toISOString() })
+        .update({ notes })
         .eq("id", id);
 
       if (error) throw error;
@@ -102,7 +100,7 @@ export async function PUT(
       // Update check status
       await supabase
         .from("task_checks")
-        .update({ status: "approved", notes, updated_at: new Date().toISOString() })
+        .update({ status: "approved", notes })
         .eq("id", id);
 
       // Update task check_status
@@ -111,13 +109,23 @@ export async function PUT(
         .update({ check_status: "checking_level2" })
         .eq("id", check.task_id);
 
-      // Create Level 2 check
+      // Create Level 2 check. This routing lookup needs to see every
+      // employee's classification regardless of who the caller is, so it
+      // uses the admin client rather than the request-scoped one.
+      const { data: manager } = await createAdminClient()
+        .from("employees")
+        .select("id")
+        .in("classification", ["manager", "admin"])
+        .order("classification", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
       await supabase
         .from("task_checks")
         .insert([
           {
             task_id: check.task_id,
-            checker_id: 1, // Will be assigned by manager
+            checker_id: manager?.id ?? check.checker_id,
             check_level: 2,
             status: "in_progress",
           },
@@ -135,7 +143,7 @@ export async function PUT(
 
       await supabase
         .from("task_checks")
-        .update({ status: "rejected", notes, updated_at: new Date().toISOString() })
+        .update({ status: "rejected", notes })
         .eq("id", id);
 
       await supabase

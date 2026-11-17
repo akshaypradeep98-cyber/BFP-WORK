@@ -10,7 +10,7 @@ interface Employee {
   avatar_color: string;
   classification: string;
   specialisation: string;
-  capacity: number;
+  weekly_capacity: number;
   on_leave: boolean;
 }
 
@@ -158,15 +158,23 @@ export default function TeamWorkloadDashboard() {
     );
   };
 
+  // Workload is each employee's real open-task count against a simple
+  // task-count threshold, not a fabricated hours figure — there's no
+  // reliable per-task hour estimate to multiply by, so we don't pretend
+  // one exists. weekly_capacity is still shown, but task count (not
+  // invented hours) drives the free/light/busy/overloaded bucket.
+  const TASKS_PER_WEEK_FULL_LOAD = 5;
+
   const calculateWorkload = (employee: Employee): EmployeeWorkload => {
     const openTasks = getOpenTasks(employee.id);
     const taskCount = openTasks.length;
-    const workload = taskCount * 6;
-    const capacity = employee.capacity || 40;
-    const percentage = (workload / capacity) * 100;
+    const capacity = employee.weekly_capacity || 40;
+    const percentage = (taskCount / TASKS_PER_WEEK_FULL_LOAD) * 100;
 
     let status: "free" | "light" | "busy" | "overloaded";
     if (employee.on_leave) {
+      status = "free";
+    } else if (taskCount === 0) {
       status = "free";
     } else if (percentage < 60) {
       status = "light";
@@ -179,21 +187,22 @@ export default function TeamWorkloadDashboard() {
     return {
       employee,
       openTasks: taskCount,
-      workload,
+      workload: taskCount,
       percentage,
       status,
     };
   };
 
-  const openTasksCount = tasks.filter((t) => t.status !== "done").length;
+  const openTasksCount = tasks.filter(
+    (t) => t.status !== "done" && !t.employee_id
+  ).length;
+  const now = new Date();
   const overdueCount = tasks.filter(
-    (t) =>
-      t.status !== "done" &&
-      new Date(t.due_date) < new Date("2026-06-17")
+    (t) => t.status !== "done" && t.due_date && new Date(t.due_date) < now
   ).length;
   const workloads = employees.map(calculateWorkload);
   const freeStaffCount = workloads.filter(
-    (w) => !w.employee.on_leave && w.percentage < 60
+    (w) => !w.employee.on_leave && w.status === "free"
   ).length;
   const onLeaveCount = employees.filter((e) => e.on_leave).length;
 
@@ -327,7 +336,7 @@ export default function TeamWorkloadDashboard() {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <div className="text-sm font-semibold text-slate-900 mb-1.5">
-                          {workload.workload} of {employee.capacity}h
+                          {workload.openTasks} open task{workload.openTasks === 1 ? "" : "s"}
                         </div>
                         <div className="w-36 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                           <div
@@ -341,11 +350,11 @@ export default function TeamWorkloadDashboard() {
                       </div>
                     </div>
                     <div className="flex gap-2.5 mt-3">
-                      <span className="bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 px-2.5 py-1 rounded-lg text-xs font-semibold">
-                        Available
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${getWorkloadBadgeColor(workload.status)}`}>
+                        {getWorkloadLabel(workload.status, employee.on_leave)}
                       </span>
                       <span className="text-slate-600 text-xs">
-                        {workload.percentage.toFixed(0)}% capacity utilized
+                        {Math.min(workload.percentage, 100).toFixed(0)}% capacity utilized
                       </span>
                     </div>
                   </div>

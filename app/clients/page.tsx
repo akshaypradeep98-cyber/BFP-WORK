@@ -2,22 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import NavbarRefined from "@/components/NavbarRefined";
+import AddClientModal from "./components/AddClientModal";
+import { getCurrentUserFromCookies } from "@/lib/auth";
 
 interface Client {
   id: number;
   name: string;
-  industry: string;
-  lead_id?: number;
-  lead?: string;
+  type?: string;
   retainer?: number;
   status?: string;
+  kmp_names?: string[];
 }
 
 export default function ClientsPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [canManageClients, setCanManageClients] = useState(false);
 
   useEffect(() => {
     const checkAuthAndFetch = async () => {
@@ -30,6 +34,11 @@ export default function ClientsPage() {
         router.push("/login");
         return;
       }
+
+      const user = getCurrentUserFromCookies();
+      setCanManageClients(
+        user?.classification === "admin" || user?.classification === "manager"
+      );
 
       await fetchClients();
     };
@@ -85,29 +94,47 @@ export default function ClientsPage() {
             <h1 className="text-4xl font-bold text-slate-900 mb-2">Clients 💼</h1>
             <p className="text-slate-600">Accounts you manage and their engagement status</p>
           </div>
-          <button
-            onClick={() => alert("Add Client functionality coming soon")}
-            className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
-          >
-            + Add Client
-          </button>
+          {canManageClients && (
+            <div className="flex items-center gap-3">
+              <Link
+                href="/clients/export"
+                className="px-5 py-3 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition"
+              >
+                Export
+              </Link>
+              <Link
+                href="/clients/import"
+                className="px-5 py-3 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition"
+              >
+                Import
+              </Link>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
+              >
+                + Add Client
+              </button>
+            </div>
+          )}
         </div>
 
         {clients.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-2xl border border-violet-500/6">
             <p className="text-slate-600 mb-4">No clients yet</p>
-            <button
-              onClick={() => alert("Add Client functionality coming soon")}
-              className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
-            >
-              + Add Your First Client
-            </button>
+            {canManageClients && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-6 py-3 bg-gradient-to-r from-violet-600 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg hover:shadow-violet-600/30 transition"
+              >
+                + Add Your First Client
+              </button>
+            )}
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-violet-500/6 overflow-hidden">
             <div className="grid grid-cols-6 gap-6 px-6 py-4 font-bold text-xs text-slate-500 uppercase tracking-wide bg-slate-50 border-b border-slate-100">
               <div>Client</div>
-              <div>Lead</div>
+              <div>KMP</div>
               <div>Retainer</div>
               <div>Status</div>
               <div></div>
@@ -128,10 +155,14 @@ export default function ClientsPage() {
                     </div>
                     <div>
                       <div className="font-bold text-sm text-slate-900">{client.name}</div>
-                      <div className="text-xs text-slate-600 font-semibold">{client.industry || "N/A"}</div>
+                      <div className="text-xs text-slate-600 font-semibold">{client.type || "N/A"}</div>
                     </div>
                   </div>
-                  <div className="font-semibold text-sm text-slate-700">{client.lead || "—"}</div>
+                  <div className="font-semibold text-sm text-slate-700">
+                    {client.kmp_names && client.kmp_names.length > 0
+                      ? client.kmp_names.join(", ")
+                      : "—"}
+                  </div>
                   <div className="font-semibold text-sm text-slate-700">
                     {client.retainer ? `₹${client.retainer}` : "—"}
                   </div>
@@ -142,12 +173,14 @@ export default function ClientsPage() {
                   </div>
                   <div></div>
                   <div>
-                    <button
-                      onClick={() => handleDeleteClient(client.id)}
-                      className="px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 rounded transition"
-                    >
-                      Delete
-                    </button>
+                    {canManageClients && (
+                      <button
+                        onClick={() => handleDeleteClient(client.id)}
+                        className="px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 rounded transition"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -155,6 +188,13 @@ export default function ClientsPage() {
           </div>
         )}
       </div>
+
+      {showAddModal && (
+        <AddClientModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={fetchClients}
+        />
+      )}
     </div>
   );
 }

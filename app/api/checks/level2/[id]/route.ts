@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createRequestClient } from "@/lib/supabase/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
 
     const { data: check, error } = await supabase
@@ -98,6 +91,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
     const { action, notes, new_checker_id } = await request.json();
 
@@ -111,7 +105,7 @@ export async function PUT(
       // Update check
       await supabase
         .from("task_checks")
-        .update({ status: "approved", notes, updated_at: new Date().toISOString() })
+        .update({ status: "approved", notes })
         .eq("id", id);
 
       // Mark task as approved
@@ -132,7 +126,7 @@ export async function PUT(
 
       await supabase
         .from("task_checks")
-        .update({ status: "rejected", notes, updated_at: new Date().toISOString() })
+        .update({ status: "rejected", notes })
         .eq("id", id);
 
       await supabase

@@ -1,15 +1,5 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import bcrypt from "bcryptjs";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,37 +12,52 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Query employee by username
-    const { data: employee, error: queryError } = await supabase
+    // Username -> email lookup happens before any session exists, so it
+    // must bypass RLS. The admin client never leaves this route.
+    const admin = createAdminClient();
+    const { data: employee, error: queryError } = await admin
       .from("employees")
-      .select("id, name, username, password_hash, classification")
+      .select("id, name, username, email, classification")
       .eq("username", username)
       .single();
 
-    if (queryError || !employee) {
+    if (queryError || !employee || !employee.email) {
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 }
       );
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, employee.password_hash);
+    // This client is request-scoped: on success it writes the real
+    // Supabase Auth session into cookies via @supabase/ssr.
+    const supabase = await createRequestClient();
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: employee.email,
+      password,
+    });
 
-    if (!isValidPassword) {
+    if (signInError) {
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 }
       );
     }
 
-    // Return employee data (no password hash)
-    return NextResponse.json({
+    const res = NextResponse.json({
       employee_id: employee.id,
       name: employee.name,
       username: employee.username,
       classification: employee.classification,
     });
+
+    // Display-only cookies for the existing pages/components that read
+    // these for UI purposes. Not used for authorization anymore — that's
+    // enforced by the Supabase Auth session + RLS + middleware above.
+    res.cookies.set("employee_id", String(employee.id), { path: "/", maxAge: 86400 });
+    res.cookies.set("employee_name", encodeURIComponent(employee.name), { path: "/", maxAge: 86400 });
+    res.cookies.set("employee_classification", employee.classification, { path: "/", maxAge: 86400 });
+
+    return res;
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json(

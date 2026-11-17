@@ -35,14 +35,7 @@ export default function LoginPage() {
         return;
       }
 
-      const data = await response.json();
-
-      // Set cookies
-      document.cookie = `employee_id=${data.employee_id}; path=/; max-age=86400`;
-      document.cookie = `employee_name=${encodeURIComponent(data.name)}; path=/; max-age=86400`;
-      document.cookie = `employee_classification=${data.classification}; path=/; max-age=86400`;
-
-      // Redirect to dashboard
+      // The login route sets the session and display cookies server-side.
       window.location.href = "/dashboard";
     } catch (err) {
       setError("Login failed. Please try again.");
@@ -118,7 +111,7 @@ export default function LoginPage() {
                 </button>
               </div>
               <p className="text-xs text-slate-500 mt-1.5 font-medium">
-                All passwords: password@123
+                Passwords: akshay@123 · kaarthik@123 · treesa@123 · hari@123
               </p>
             </div>
 

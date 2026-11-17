@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
+import { withScheduledParts } from "@/lib/appointments";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET user's appointments
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const employeeIdHeader = request.headers.get("X-Employee-Id");
     if (!employeeIdHeader) {
       return NextResponse.json(
@@ -44,8 +38,9 @@ export async function GET(request: NextRequest) {
           .eq("id", apt.task_id)
           .single();
 
-        // Get manager
-        const { data: manager } = await supabase
+        // Get manager (name-only lookup: the caller usually isn't
+        // admin/manager themselves, so this can't use their RLS-scoped client)
+        const { data: manager } = await createAdminClient()
           .from("employees")
           .select("id, name")
           .eq("id", apt.manager_id)
@@ -61,7 +56,7 @@ export async function GET(request: NextRequest) {
           .lt("created_at", apt.created_at);
 
         return {
-          ...apt,
+          ...withScheduledParts(apt),
           task,
           manager,
           queue_position: (queueCount?.length || 0) + 1,
@@ -82,6 +77,7 @@ export async function GET(request: NextRequest) {
 // POST create appointment
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const { task_id, employee_id, manager_id, check_type } = await request.json();
 
     if (!task_id || !employee_id || !manager_id || !check_type) {

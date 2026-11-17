@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createRequestClient } from "@/lib/supabase/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET tasks waiting for checks for current employee
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const employeeIdHeader = request.headers.get("X-Employee-Id");
     if (!employeeIdHeader) {
       return NextResponse.json(

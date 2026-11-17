@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createRequestClient } from "@/lib/supabase/server";
 import * as XLSX from "xlsx";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const duplicateHandling = formData.get("duplicateHandling") as string;
@@ -33,15 +26,6 @@ export async function POST(request: NextRequest) {
     const workbook = XLSX.read(buffer, { type: "array" });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(worksheet) as any[];
-
-    // Fetch all employees for name-to-id mapping
-    const { data: employees } = await supabase
-      .from("employees")
-      .select("id, name");
-
-    const employeeMap = new Map(
-      (employees || []).map((e: any) => [e.name?.toLowerCase(), e.id])
-    );
 
     // Fetch existing clients
     const { data: existingClients } = await supabase
@@ -78,13 +62,7 @@ export async function POST(request: NextRequest) {
       const type = row["Type"]?.toString().trim() || null;
       const mobile = row["Mobile"]?.toString().trim() || null;
       const address = row["Address"]?.toString().trim() || null;
-      const leadEmployeeName = row["Lead Employee"]?.toString().trim();
       const kmpString = row["KMP"]?.toString().trim() || "";
-      const documentsString = row["Documents"]?.toString().trim() || "";
-
-      const leadEmployeeId = leadEmployeeName
-        ? employeeMap.get(leadEmployeeName.toLowerCase())
-        : null;
 
       // Check for duplicates
       const existingClient = existingClientMap.get(clientName.toLowerCase());
@@ -101,7 +79,6 @@ export async function POST(request: NextRequest) {
               type,
               mobile,
               address,
-              lead_employee_id: leadEmployeeId || null,
               updated_at: new Date().toISOString(),
             })
             .eq("id", existingClient.id);
@@ -150,7 +127,6 @@ export async function POST(request: NextRequest) {
               type,
               mobile,
               address,
-              lead_employee_id: leadEmployeeId || null,
             },
           ])
           .select();

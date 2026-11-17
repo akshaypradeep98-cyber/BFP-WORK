@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       .from("subtask_verifications")
       .select("id")
       .eq("subtask_id", subtask_id)
-      .eq("task_check_id", task_check_id)
+      .eq("check_id", task_check_id)
       .single();
 
     if (selectError && selectError.code !== "PGRST116") {
@@ -43,7 +43,6 @@ export async function POST(request: NextRequest) {
         .update({
           verified: verified !== false,
           verified_at: verified ? new Date().toISOString() : null,
-          updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id);
 
@@ -57,7 +56,7 @@ export async function POST(request: NextRequest) {
         .insert([
           {
             subtask_id,
-            task_check_id,
+            check_id: task_check_id,
             verified: true,
             verified_at: new Date().toISOString(),
           },
@@ -94,7 +93,7 @@ export async function GET(request: NextRequest) {
     const { data: verifications, error } = await supabase
       .from("subtask_verifications")
       .select("*")
-      .eq("task_check_id", task_check_id);
+      .eq("check_id", task_check_id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -10,7 +10,7 @@ import WhatsAppNotificationModal from "@/components/WhatsAppNotificationModal";
 interface Employee {
   id: number;
   name: string;
-  avatar_color: string;
+  avatar_color?: string;
 }
 
 interface Client {
@@ -119,7 +119,7 @@ export default function TasksPage() {
 
   const fetchEmployees = async () => {
     try {
-      const response = await fetch("/api/employees");
+      const response = await fetch("/api/employees/directory");
       if (!response.ok) throw new Error("Failed to fetch employees");
       const data = await response.json();
       setEmployees(data);

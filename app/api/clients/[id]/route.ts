@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET single client with KMPs
 export async function GET(
@@ -16,6 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
     const { data: client, error: clientError } = await supabase
       .from("clients")
@@ -58,9 +51,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
     const body = await request.json();
-    const { name, type, mobile, lead_employee_id, address, kmps } = body;
+    const { name, type, mobile, address, kmps } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -76,7 +70,6 @@ export async function PUT(
         name,
         type: type || null,
         mobile: mobile || null,
-        lead_employee_id: lead_employee_id || null,
         address: address || null,
         updated_at: new Date().toISOString(),
       })
@@ -134,13 +127,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createRequestClient();
     const { id } = await params;
 
     // First delete KMPs
     await supabase.from("client_kmp").delete().eq("client_id", id);
 
-    // Then delete tasks associated with this client
-    await supabase.from("tasks").delete().eq("client_id", id);
+    // Then delete tasks associated with this client. Task deletion is
+    // normally admin-only, but this is cascading cleanup for a client
+    // deletion the caller (manager or admin) was already authorized to
+    // perform, so it uses the admin client rather than re-deriving a
+    // task-level policy for it.
+    await createAdminClient().from("tasks").delete().eq("client_id", id);
 
     // Finally delete the client
     const { error } = await supabase

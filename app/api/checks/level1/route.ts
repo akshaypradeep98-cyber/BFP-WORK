@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET() {
   try {
+    const supabase = await createRequestClient();
     // Get all Level 1 checks that are in_progress
     const { data: checks, error } = await supabase
       .from("task_checks")
@@ -26,6 +19,7 @@ export async function GET() {
     }
 
     // Enrich with task, client, worker info
+    const admin = createAdminClient();
     const enriched = await Promise.all(
       (checks || []).map(async (check: any) => {
         // Get task
@@ -42,10 +36,11 @@ export async function GET() {
           .eq("id", task?.client_id)
           .single();
 
-        // Get worker
-        const { data: worker } = await supabase
+        // Get worker (name-only lookup, since the caller may not be
+        // admin/manager or the worker themselves)
+        const { data: worker } = await admin
           .from("employees")
-          .select("*")
+          .select("name")
           .eq("id", task?.employee_id)
           .single();
 

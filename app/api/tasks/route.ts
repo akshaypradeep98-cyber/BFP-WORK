@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createRequestClient } from "@/lib/supabase/server";
 import { getSubtasksForTitle } from "@/lib/taskTemplates";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET all tasks (with optional employee_id filter)
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const { searchParams } = new URL(request.url);
     const employeeId = searchParams.get("employee_id");
 
@@ -43,6 +36,7 @@ export async function GET(request: NextRequest) {
 // POST create new task
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const body = await request.json();
     const { title, client_id, employee_id, division_id, due_date, amount, tax_period, template_id, subtasks } =
       body;
@@ -86,7 +80,7 @@ export async function POST(request: NextRequest) {
     if (subtasks && Array.isArray(subtasks) && subtasks.length > 0) {
       subtasksData = subtasks.map((st: any) => ({
         task_id: taskId,
-        text: st.text,
+        title: st.text ?? st.title,
         done: false,
         seconds: 0,
         notes: null,
@@ -106,7 +100,7 @@ export async function POST(request: NextRequest) {
       } else if (templateSubtasks && templateSubtasks.length > 0) {
         subtasksData = templateSubtasks.map((st) => ({
           task_id: taskId,
-          text: st.text,
+          title: st.text ?? st.title,
           done: false,
           seconds: 0,
           notes: st.notes || null,
@@ -118,7 +112,7 @@ export async function POST(request: NextRequest) {
       const template = getSubtasksForTitle(title);
       subtasksData = template.map((st) => ({
         task_id: taskId,
-        text: st.title,
+        title: st.title,
         done: false,
         seconds: 0,
         sort_order: st.sortOrder,

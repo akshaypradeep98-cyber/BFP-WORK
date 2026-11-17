@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createRequestClient } from "@/lib/supabase/server";
+import { withScheduledParts } from "@/lib/appointments";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET manager's appointments
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const managerIdHeader = request.headers.get("X-Manager-Id");
     if (!managerIdHeader) {
       return NextResponse.json(
@@ -63,7 +57,7 @@ export async function GET(request: NextRequest) {
           .lt("created_at", apt.created_at);
 
         return {
-          ...apt,
+          ...withScheduledParts(apt),
           employee,
           task,
           queue_position: (queueCount?.length || 0) + 1,

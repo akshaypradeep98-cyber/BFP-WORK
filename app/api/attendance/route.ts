@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET all attendance records with optional employee filter
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createRequestClient();
     const employeeId = request.nextUrl.searchParams.get("employee_id");
 
     let query = supabase
@@ -30,8 +23,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Fetch all employees for name mapping
-    const { data: employees, error: empError } = await supabase
+    // Fetch all employees for name mapping (name-only, via admin client
+    // since this list isn't restricted to admin/manager callers)
+    const { data: employees, error: empError } = await createAdminClient()
       .from("employees")
       .select("id, name");
 

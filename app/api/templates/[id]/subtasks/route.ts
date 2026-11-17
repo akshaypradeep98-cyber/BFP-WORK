@@ -76,7 +76,7 @@ export async function POST(
         {
           template_id: id,
           text,
-          notes: notes || null,
+          ...(notes ? { notes } : {}),
           sort_order: finalSortOrder,
         },
       ])

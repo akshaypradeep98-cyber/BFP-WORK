@@ -3,7 +3,7 @@
 interface Employee {
   id: number;
   name: string;
-  avatar_color: string;
+  avatar_color?: string;
 }
 
 interface Client {
@@ -186,7 +186,7 @@ export default function TaskTable({
                     <div className="flex items-center gap-2">
                       <div
                         className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold"
-                        style={{ backgroundColor: employee.avatar_color }}
+                        style={{ backgroundColor: employee.avatar_color || "#6366f1" }}
                       >
                         {getInitials(employee.name)}
                       </div>

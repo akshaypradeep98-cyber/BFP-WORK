@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import NavbarRefined from "@/components/NavbarRefined";
 import * as XLSX from "xlsx";
 
 interface ImportPreview {
@@ -185,6 +186,7 @@ export default function ClientImportPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <NavbarRefined />
       {/* Header */}
       <div className="bg-[#1C3350] text-white">
         <div className="max-w-4xl mx-auto px-4 py-6">
@@ -314,16 +316,25 @@ export default function ClientImportPage() {
 
               {/* Format Info */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
-                <h3 className="font-semibold text-blue-900 mb-2">Expected Excel Format:</h3>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Column A: Client Name (required)</li>
-                  <li>• Column B: Type</li>
-                  <li>• Column C: Mobile</li>
-                  <li>• Column D: Address</li>
-                  <li>• Column E: Lead Employee</li>
-                  <li>• Column F: KMP (Name|Designation|Mobile; separated by semicolon)</li>
-                  <li>• Column G: Documents (comma-separated)</li>
-                </ul>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-blue-900 mb-2">Expected Excel Format:</h3>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Column A: Client Name (required)</li>
+                      <li>• Column B: Type</li>
+                      <li>• Column C: Mobile</li>
+                      <li>• Column D: Address</li>
+                      <li>• Column E: KMP (Name|Designation|Mobile; separated by semicolon for multiple)</li>
+                    </ul>
+                  </div>
+                  <a
+                    href="/api/clients/import-template"
+                    download
+                    className="shrink-0 px-4 py-2 bg-white border border-blue-300 text-blue-700 text-sm font-semibold rounded-lg hover:bg-blue-100 transition whitespace-nowrap"
+                  >
+                    ⬇ Download Template
+                  </a>
+                </div>
               </div>
             </>
           ) : (
