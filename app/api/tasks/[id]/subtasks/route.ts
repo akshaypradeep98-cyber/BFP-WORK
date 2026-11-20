@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checklistLockedResponse } from "@/lib/checklistLock";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -18,6 +19,8 @@ export async function POST(
   try {
     const { id } = await params;
     const taskId = parseInt(id);
+    const locked = await checklistLockedResponse(taskId);
+    if (locked) return locked;
     const body = await request.json();
     const { title } = body;
 

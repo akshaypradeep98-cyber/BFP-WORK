@@ -2,12 +2,20 @@
 
 import { useState, useEffect } from "react";
 
+interface BankAccount {
+  id: number;
+  bank_name: string;
+  account_number: string;
+}
+
 interface Payment {
   id: number;
   task_id: number;
   amount: number;
   payment_date: string;
   mode: string;
+  bank_account_id: number | null;
+  bank_account: BankAccount | null;
 }
 
 interface PaymentsPanelProps {
@@ -26,11 +34,13 @@ export default function PaymentsPanel({
   onTaskUpdate,
 }: PaymentsPanelProps) {
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newPayment, setNewPayment] = useState({
     amount: "",
     payment_date: new Date().toISOString().split("T")[0],
     mode: "UPI",
+    bank_account_id: "",
   });
   const [amount, setAmount] = useState(taskAmount);
   const [expense, setExpense] = useState(taskExpense);
@@ -39,7 +49,19 @@ export default function PaymentsPanel({
 
   useEffect(() => {
     fetchPayments();
+    fetchBankAccounts();
   }, [taskId]);
+
+  const fetchBankAccounts = async () => {
+    try {
+      const response = await fetch("/api/bank-accounts");
+      if (!response.ok) return;
+      const data = await response.json();
+      setBankAccounts(data);
+    } catch (error) {
+      console.error("Error fetching bank accounts:", error);
+    }
+  };
 
   const fetchPayments = async () => {
     try {
@@ -73,6 +95,9 @@ export default function PaymentsPanel({
           amount: parseInt(newPayment.amount),
           payment_date: newPayment.payment_date,
           mode: newPayment.mode,
+          bank_account_id: newPayment.bank_account_id
+            ? parseInt(newPayment.bank_account_id)
+            : null,
         }),
       });
 
@@ -82,6 +107,7 @@ export default function PaymentsPanel({
         amount: "",
         payment_date: new Date().toISOString().split("T")[0],
         mode: "UPI",
+        bank_account_id: "",
       });
     } catch (error) {
       console.error("Error adding payment:", error);
@@ -285,6 +311,9 @@ export default function PaymentsPanel({
                 <th className="text-left px-4 py-2 text-xs font-semibold text-gray-700">
                   Mode
                 </th>
+                <th className="text-left px-4 py-2 text-xs font-semibold text-gray-700">
+                  Bank Account
+                </th>
                 <th className="text-center px-4 py-2 text-xs font-semibold text-gray-700">
                   Action
                 </th>
@@ -300,6 +329,9 @@ export default function PaymentsPanel({
                     {formatRupees(payment.amount)}
                   </td>
                   <td className="px-4 py-2 text-sm text-gray-700">{payment.mode}</td>
+                  <td className="px-4 py-2 text-sm text-gray-700">
+                    {payment.bank_account?.bank_name || "—"}
+                  </td>
                   <td className="text-center px-4 py-2">
                     <button
                       onClick={() => handleDeletePayment(payment.id)}
@@ -320,7 +352,7 @@ export default function PaymentsPanel({
       {/* Add Payment Form */}
       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
         <p className="text-sm font-semibold text-gray-900 mb-3">Add Payment</p>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-5 gap-3">
           <input
             type="date"
             value={newPayment.payment_date}
@@ -348,6 +380,20 @@ export default function PaymentsPanel({
             {MODES.map((mode) => (
               <option key={mode} value={mode}>
                 {mode}
+              </option>
+            ))}
+          </select>
+          <select
+            value={newPayment.bank_account_id}
+            onChange={(e) =>
+              setNewPayment({ ...newPayment, bank_account_id: e.target.value })
+            }
+            className="px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-[#1C3350]"
+          >
+            <option value="">Bank Account</option>
+            {bankAccounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.bank_name}
               </option>
             ))}
           </select>

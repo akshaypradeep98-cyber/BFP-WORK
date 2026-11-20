@@ -1,8 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const AUTH_RETRY_DELAY_MS = 500;
 
 // Returns the authenticated user (or null) and a response that carries
 // any refreshed session cookies. Call this first in middleware.ts and
@@ -25,9 +27,17 @@ export async function getUserAndResponse(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let result = await supabase.auth.getUser();
+  if (isAuthRetryableFetchError(result.error)) {
+    await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAY_MS));
+    result = await supabase.auth.getUser();
+  }
 
-  return { user, supabase, response };
+  // A network failure also returns a null user, but says nothing about the session.
+  const authUnavailable = isAuthRetryableFetchError(result.error);
+  if (authUnavailable) {
+    console.error("Supabase Auth unreachable:", result.error?.message);
+  }
+
+  return { user: result.data.user, authUnavailable, supabase, response };
 }

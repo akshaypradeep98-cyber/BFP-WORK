@@ -50,7 +50,6 @@ export async function PUT(
       classification,
       specialisation,
       date_of_birth,
-      weekly_capacity,
       on_leave,
     } = body;
 
@@ -63,7 +62,6 @@ export async function PUT(
       classification: classification || null,
       specialisation: specialisation || null,
       date_of_birth: date_of_birth || null,
-      weekly_capacity: weekly_capacity || 40,
       on_leave: on_leave || false,
     };
 

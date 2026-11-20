@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { formatTime, formatTimerDisplay } from "@/lib/taskTemplates";
 
 interface Subtask {
@@ -18,6 +18,11 @@ interface SubtaskChecklistProps {
   taskTitle: string;
   subtasks: Subtask[];
   onSubtasksChange: (subtasks: Subtask[]) => void;
+  locked?: boolean;
+  // After Level 2 approval: steps the Level 1 checker verified stay frozen;
+  // the rest (post-check work) can still be ticked, timed and noted.
+  frozenIds?: Set<number>;
+  lockMessage?: string;
 }
 
 export default function SubtaskChecklist({
@@ -25,21 +30,39 @@ export default function SubtaskChecklist({
   taskTitle,
   subtasks,
   onSubtasksChange,
+  locked = false,
+  frozenIds,
+  lockMessage = "🔒 Locked while this task is with a checker. It can be edited again if it's sent back.",
 }: SubtaskChecklistProps) {
+  const approvedMode = !!frozenIds && !locked;
+  const structureLocked = locked || approvedMode;
+  const stepLocked = (id: number) => locked || !!frozenIds?.has(id);
+
   const [localSubtasks, setLocalSubtasks] = useState(subtasks);
   const [timers, setTimers] = useState<Record<number, number>>({});
   const [runningTimer, setRunningTimer] = useState<number | null>(null);
   const [newStepTitle, setNewStepTitle] = useState("");
+  const [minuteInputs, setMinuteInputs] = useState<Record<number, string>>({});
+  const [timeError, setTimeError] = useState<string | null>(null);
+  const subtasksRef = useRef(localSubtasks);
+  subtasksRef.current = localSubtasks;
+
+  // A locked checklist can't log time, so drop any timer left running.
+  useEffect(() => {
+    if (!locked) return;
+    setRunningTimer(null);
+    localStorage.removeItem(`task-${taskId}-timer`);
+  }, [locked, taskId]);
 
   // Load timer state from localStorage on mount
   useEffect(() => {
     const savedTimer = localStorage.getItem(`task-${taskId}-timer`);
-    if (savedTimer) {
+    if (savedTimer && !locked) {
       const { subtaskId, elapsed } = JSON.parse(savedTimer);
       setRunningTimer(subtaskId);
       setTimers({ [subtaskId]: elapsed });
     }
-  }, [taskId]);
+  }, [taskId, locked]);
 
   // Timer effect
   useEffect(() => {
@@ -68,6 +91,7 @@ export default function SubtaskChecklist({
   }, [runningTimer, taskId, timers]);
 
   const handleCheckbox = async (subtaskId: number) => {
+    if (stepLocked(subtaskId)) return;
     const updated = localSubtasks.map((st) =>
       st.id === subtaskId ? { ...st, done: !st.done } : st
     );
@@ -85,66 +109,84 @@ export default function SubtaskChecklist({
     }
   };
 
-  const handleStartTimer = (subtaskId: number) => {
-    setRunningTimer(subtaskId);
-    setTimers((prev) => ({ ...prev, [subtaskId]: prev[subtaskId] || 0 }));
+  // Adds time to a step and saves the new total. Every path that logs
+  // time (pause, stop, switching timers, manual minutes) goes through here
+  // so nothing lives only in the browser.
+  // Reads through a ref so two saves in one click (e.g. typed minutes,
+  // then the timer) build on each other instead of the same stale list.
+  const logTime = async (subtaskId: number, addSeconds: number) => {
+    if (addSeconds <= 0) return;
+    const current = subtasksRef.current.find((s) => s.id === subtaskId);
+    await saveTime(subtaskId, (current?.seconds || 0) + addSeconds);
   };
 
-  const handlePauseTimer = (subtaskId: number) => {
-    setRunningTimer(null);
-  };
-
-  const handleStopTimer = async (subtaskId: number) => {
-    setRunningTimer(null);
-    const elapsed = timers[subtaskId] || 0;
-
-    const updated = localSubtasks.map((st) =>
-      st.id === subtaskId
-        ? { ...st, seconds: st.seconds + elapsed }
-        : st
+  const saveTime = async (subtaskId: number, newTotal: number) => {
+    if (stepLocked(subtaskId)) return;
+    setTimeError(null);
+    const updated = subtasksRef.current.map((st) =>
+      st.id === subtaskId ? { ...st, seconds: newTotal } : st
     );
+    subtasksRef.current = updated;
     setLocalSubtasks(updated);
     onSubtasksChange(updated);
 
     try {
-      await fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}`, {
+      const response = await fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          seconds: updated.find((s) => s.id === subtaskId)?.seconds,
-        }),
+        body: JSON.stringify({ seconds: newTotal }),
       });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Couldn't save the time");
+      }
     } catch (error) {
       console.error("Error updating subtask time:", error);
+      setTimeError(
+        `${error instanceof Error ? error.message : "Couldn't save the time"} — refresh and try again.`
+      );
     }
+  };
 
+  const commitRunningTimer = async () => {
+    if (runningTimer === null) return;
+    const subtaskId = runningTimer;
+    const elapsed = timers[subtaskId] || 0;
+    setRunningTimer(null);
     setTimers((prev) => ({ ...prev, [subtaskId]: 0 }));
     localStorage.removeItem(`task-${taskId}-timer`);
+    await logTime(subtaskId, elapsed);
   };
 
-  const handleAddMinutes = async (subtaskId: number, minutes: number) => {
-    const updated = localSubtasks.map((st) =>
-      st.id === subtaskId
-        ? { ...st, seconds: st.seconds + minutes * 60 }
-        : st
-    );
-    setLocalSubtasks(updated);
-    onSubtasksChange(updated);
+  const handleAddMinutes = async (subtaskId: number) => {
+    const mins = parseInt(minuteInputs[subtaskId] || "");
+    if (!mins || mins <= 0) return;
+    setMinuteInputs((prev) => ({ ...prev, [subtaskId]: "" }));
+    await logTime(subtaskId, mins * 60);
+  };
 
-    try {
-      await fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          seconds: updated.find((s) => s.id === subtaskId)?.seconds,
-        }),
-      });
-    } catch (error) {
-      console.error("Error updating subtask time:", error);
+  const handleResetTime = async (subtaskId: number) => {
+    if (!window.confirm("Clear all time logged on this step and start again from 0?")) return;
+    if (runningTimer === subtaskId) {
+      setRunningTimer(null);
+      localStorage.removeItem(`task-${taskId}-timer`);
     }
+    setTimers((prev) => ({ ...prev, [subtaskId]: 0 }));
+    setMinuteInputs((prev) => ({ ...prev, [subtaskId]: "" }));
+    await saveTime(subtaskId, 0);
+  };
+
+  // The stopwatch continues from the step's logged total, so minutes
+  // typed into the box (even if not yet added) count before it starts.
+  const handleStartTimer = async (subtaskId: number) => {
+    await commitRunningTimer();
+    await handleAddMinutes(subtaskId);
+    setRunningTimer(subtaskId);
+    setTimers((prev) => ({ ...prev, [subtaskId]: 0 }));
   };
 
   const handleNotesChange = async (subtaskId: number, notes: string) => {
+    if (stepLocked(subtaskId)) return;
     const updated = localSubtasks.map((st) =>
       st.id === subtaskId ? { ...st, notes } : st
     );
@@ -162,6 +204,7 @@ export default function SubtaskChecklist({
   };
 
   const handleDeleteSubtask = async (subtaskId: number) => {
+    if (structureLocked) return;
     const updated = localSubtasks.filter((st) => st.id !== subtaskId);
     setLocalSubtasks(updated);
     onSubtasksChange(updated);
@@ -176,6 +219,7 @@ export default function SubtaskChecklist({
   };
 
   const handleAddStep = async () => {
+    if (structureLocked) return;
     if (!newStepTitle.trim()) return;
 
     try {
@@ -203,6 +247,24 @@ export default function SubtaskChecklist({
         <h3 className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{taskTitle}</h3>
       </div>
 
+      {timeError && (
+        <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded-md text-sm">
+          {timeError}
+        </div>
+      )}
+
+      {locked && (
+        <div className="bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 px-4 py-3 rounded-md text-sm">
+          {lockMessage}
+        </div>
+      )}
+
+      {approvedMode && (
+        <div className="bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 text-green-800 dark:text-green-200 px-4 py-3 rounded-md text-sm">
+          ✓ Approved. Steps verified in the check are locked; tick off any remaining steps, then mark the task completed below.
+        </div>
+      )}
+
       {/* Checklist Items */}
       <div className="space-y-4">
         {localSubtasks.map((subtask, index) => (
@@ -222,7 +284,10 @@ export default function SubtaskChecklist({
                     type="checkbox"
                     checked={subtask.done}
                     onChange={() => handleCheckbox(subtask.id)}
-                    className="mt-1 w-5 h-5 rounded border-gray-300 dark:border-gray-600 cursor-pointer accent-accent-400"
+                    disabled={stepLocked(subtask.id)}
+                    className={`mt-1 w-5 h-5 rounded border-gray-300 dark:border-gray-600 accent-accent-400 ${
+                      stepLocked(subtask.id) ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                    }`}
                   />
                   <p
                     className={`flex-1 text-base font-medium leading-relaxed ${
@@ -233,6 +298,7 @@ export default function SubtaskChecklist({
                   >
                     {subtask.title}
                   </p>
+                  {!structureLocked && (
                   <button
                     onClick={() => handleDeleteSubtask(subtask.id)}
                     className="flex-shrink-0 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 font-bold text-2xl transition"
@@ -240,6 +306,7 @@ export default function SubtaskChecklist({
                   >
                     ×
                   </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -250,58 +317,68 @@ export default function SubtaskChecklist({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Timer section */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  {runningTimer === subtask.id ? (
+                  {stepLocked(subtask.id) ? null : runningTimer === subtask.id ? (
                     <>
                       <span className="font-mono text-lg font-bold text-accent-400">
-                        {formatTimerDisplay(timers[subtask.id] || 0)}
+                        {formatTimerDisplay((subtask.seconds || 0) + (timers[subtask.id] || 0))}
                       </span>
                       <button
-                        onClick={() => handlePauseTimer(subtask.id)}
-                        className="px-3 py-1 bg-amber-500 dark:bg-amber-600 text-white text-xs rounded-md hover:bg-amber-600 dark:hover:bg-amber-700 transition font-semibold"
-                      >
-                        ⏸ Pause
-                      </button>
-                      <button
-                        onClick={() => handleStopTimer(subtask.id)}
+                        onClick={commitRunningTimer}
                         className="px-3 py-1 bg-success-500 dark:bg-green-700 text-white text-xs rounded-md hover:bg-green-700 dark:hover:bg-green-800 transition font-semibold"
                       >
-                        ✓ Stop
+                        ⏹ Stop &amp; save
                       </button>
                     </>
                   ) : (
-                    <>
-                      <button
-                        onClick={() => handleStartTimer(subtask.id)}
-                        className="px-3 py-1 bg-primary-600 dark:bg-primary-700 text-white text-xs rounded-md hover:bg-primary-700 dark:hover:bg-primary-800 transition font-semibold"
-                      >
-                        ▶ {timers[subtask.id] ? "Resume" : "Start"}
-                      </button>
-                      {(timers[subtask.id] || subtask.seconds) > 0 && (
-                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded-md">
-                          {formatTime((timers[subtask.id] || 0) + subtask.seconds)}
-                        </span>
-                      )}
-                    </>
+                    <button
+                      onClick={() => handleStartTimer(subtask.id)}
+                      className="px-3 py-1 bg-primary-600 dark:bg-primary-700 text-white text-xs rounded-md hover:bg-primary-700 dark:hover:bg-primary-800 transition font-semibold"
+                    >
+                      ▶ Start
+                    </button>
+                  )}
+                  <span
+                    className="text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded-md"
+                    title="Total time logged on this step"
+                  >
+                    {formatTime(subtask.seconds || 0)} logged
+                  </span>
+                  {!stepLocked(subtask.id) && ((subtask.seconds || 0) > 0 || runningTimer === subtask.id) && (
+                    <button
+                      onClick={() => handleResetTime(subtask.id)}
+                      className="px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-md hover:bg-red-50 dark:hover:bg-red-900 transition"
+                      title="Clear logged time and start from 0"
+                    >
+                      ↺ Reset
+                    </button>
                   )}
                 </div>
 
                 {/* Manual time input */}
+                {!stepLocked(subtask.id) && (
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    placeholder="Add minutes"
-                    min="0"
-                    className="w-24 px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-400"
-                    onBlur={(e) => {
-                      const mins = parseInt(e.target.value);
-                      if (mins > 0) {
-                        handleAddMinutes(subtask.id, mins);
-                        e.target.value = "";
-                      }
+                    placeholder="Minutes"
+                    min="1"
+                    value={minuteInputs[subtask.id] || ""}
+                    onChange={(e) =>
+                      setMinuteInputs((prev) => ({ ...prev, [subtask.id]: e.target.value }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddMinutes(subtask.id);
                     }}
+                    className="w-24 px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-400"
                   />
-                  <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">min</span>
+                  <button
+                    onClick={() => handleAddMinutes(subtask.id)}
+                    disabled={!minuteInputs[subtask.id]}
+                    className="px-3 py-1 bg-gray-700 dark:bg-gray-600 text-white text-xs rounded-md hover:bg-gray-800 transition font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    + Add min
+                  </button>
                 </div>
+                )}
               </div>
 
               {/* Notes */}
@@ -311,8 +388,9 @@ export default function SubtaskChecklist({
                   placeholder="Add notes or observations..."
                   value={subtask.notes || ""}
                   onChange={(e) => handleNotesChange(subtask.id, e.target.value)}
+                  readOnly={stepLocked(subtask.id)}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-700 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-400 resize-none"
+                  className="read-only:bg-gray-100 dark:read-only:bg-gray-800 read-only:cursor-default w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-700 dark:text-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-accent-400 resize-none"
                 />
               </div>
             </div>
@@ -321,6 +399,7 @@ export default function SubtaskChecklist({
       </div>
 
       {/* Add step */}
+      {!structureLocked && (
       <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
         <input
           type="text"
@@ -341,6 +420,7 @@ export default function SubtaskChecklist({
           + Add Step
         </button>
       </div>
+      )}
     </div>
   );
 }

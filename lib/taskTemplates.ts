@@ -122,13 +122,18 @@ export function formatTime(seconds: number): string {
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
   }
-  return `${minutes}m`;
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  return `${Math.max(0, Math.floor(seconds))}s`;
 }
 
 export function formatTimerDisplay(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
-  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  return hours > 0 ? `${hours}:${pad(mins)}:${pad(secs)}` : `${pad(mins)}:${pad(secs)}`;
 }
 
 export function getTotalTimeSeconds(subtasks: any[]): number {

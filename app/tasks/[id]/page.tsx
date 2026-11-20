@@ -8,6 +8,9 @@ import SubtaskChecklist from "./components/SubtaskChecklist";
 import PaymentsPanel from "./components/PaymentsPanel";
 import WhatsAppNotificationModal from "@/components/WhatsAppNotificationModal";
 import { formatTime, getTotalTimeSeconds } from "@/lib/taskTemplates";
+import { CHECK_RESULTS, canCompleteTask, effectiveCheckStatus, getTaxPeriods, isChecklistLocked } from "@/lib/utils";
+
+const TAX_PERIODS = getTaxPeriods();
 
 interface Employee {
   id: number;
@@ -51,10 +54,31 @@ interface Task {
   subtasks: Subtask[];
 }
 
+interface TaskCheck {
+  id: number;
+  task_id: number;
+  checker_id: number;
+  checker_name: string;
+  check_level: number;
+  status: string;
+  notes: string;
+  created_at: string;
+  approved_at: string | null;
+  resend_level?: number | null;
+}
+
+// Where a sent-back task goes when resent: Level 2 only if the Level 2
+// checker who rejected it chose that, otherwise a fresh Level 1 check.
+function getResendLevel(checks: TaskCheck[]): 1 | 2 {
+  const lastRejection = [...checks].reverse().find((c) => c.status === "rejected");
+  return lastRejection?.check_level === 2 && lastRejection.resend_level === 2 ? 2 : 1;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   todo: "bg-gray-100 text-gray-800",
   prog: "bg-amber-100 text-amber-800",
   done: "bg-green-100 text-green-800",
+  completed: "bg-slate-200 text-slate-700",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -69,7 +93,11 @@ export default function TaskDetailPage() {
   const taskId = params.id as string;
 
   const [task, setTask] = useState<Task | null>(null);
+  const [taskChecks, setTaskChecks] = useState<TaskCheck[]>([]);
+  const [verifiedIds, setVerifiedIds] = useState<Set<number>>(new Set());
+  const [isCompleting, setIsCompleting] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [reviewers, setReviewers] = useState<Employee[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -116,6 +144,7 @@ export default function TaskDetailPage() {
 
       await Promise.all([
         fetchTask(),
+        fetchTaskChecks(),
         fetchEmployees(),
         fetchClients(),
         fetchDivisions(),
@@ -161,12 +190,63 @@ export default function TaskDetailPage() {
     }
   };
 
+  const fetchTaskChecks = async () => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/checks`);
+      if (!response.ok) throw new Error("Failed to fetch checker notes");
+      const data: TaskCheck[] = await response.json();
+      setTaskChecks(data);
+
+      // Steps the latest approved Level 1 check verified stay frozen after
+      // Level 2 approval; everything else can still be finished.
+      const lastL1 = [...data].reverse().find((c) => c.check_level === 1 && c.status === "approved");
+      if (lastL1) {
+        const verRes = await fetch(`/api/subtask-verifications?task_check_id=${lastL1.id}`);
+        if (verRes.ok) {
+          const rows: { subtask_id: number; verified: boolean }[] = await verRes.json();
+          setVerifiedIds(new Set(rows.filter((r) => r.verified).map((r) => r.subtask_id)));
+        }
+      } else {
+        setVerifiedIds(new Set());
+      }
+    } catch (error) {
+      console.error("Error fetching checker notes:", error);
+    }
+  };
+
+  const handleCompleteTask = async () => {
+    if (!task) return;
+    if (!window.confirm("Mark this task as completed? It will be closed and leave the task list.")) return;
+
+    setIsCompleting(true);
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to complete the task");
+      }
+      const updated = await response.json();
+      setTask({ ...task, ...updated, subtasks: task.subtasks });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to complete the task");
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   const fetchEmployees = async () => {
     try {
-      const response = await fetch("/api/employees/directory");
+      const [response, reviewerResponse] = await Promise.all([
+        fetch("/api/employees/directory"),
+        fetch("/api/employees/directory?role=reviewer"),
+      ]);
       if (!response.ok) throw new Error("Failed to fetch employees");
-      const data = await response.json();
-      setEmployees(data);
+      setEmployees(await response.json());
+      if (reviewerResponse.ok) setReviewers(await reviewerResponse.json());
     } catch (error) {
       console.error("Error fetching employees:", error);
     }
@@ -228,11 +308,18 @@ export default function TaskDetailPage() {
   const handleCompleteTaskWithChecker = async (assignNow: boolean) => {
     if (!task) return;
 
+    const isResend = effectiveCheckStatus(task.check_status, taskChecks) === "rejected";
+    const resendLevel = isResend ? getResendLevel(taskChecks) : 1;
+
     setIsAssigningChecker(true);
     try {
       const data: any = {
         status: "done",
-        check_status: assignNow ? "checking_level1" : "waiting_for_checker",
+        check_status: assignNow
+          ? resendLevel === 2
+            ? "checking_level2"
+            : "checking_level1"
+          : "waiting_for_checker",
       };
 
       if (assignNow && selectedChecker) {
@@ -245,14 +332,18 @@ export default function TaskDetailPage() {
         body: JSON.stringify(data),
       });
 
-      if (!response.ok) throw new Error("Failed to update task");
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to update task");
+      }
       const updated = await response.json();
       setTask(updated);
+      await fetchTaskChecks();
 
       if (assignNow && selectedChecker) {
         const checker = employees.find((e) => e.id === selectedChecker);
         setCheckerAssignmentMessage(
-          `✓ Task done. Checker assigned to ${checker?.name}`
+          `✓ Sent for Level ${resendLevel} check with ${checker?.name}`
         );
       } else {
         setCheckerAssignmentMessage("⚠️ Task marked done. Assign a checker below.");
@@ -265,7 +356,7 @@ export default function TaskDetailPage() {
       setTimeout(() => setCheckerAssignmentMessage(""), 4000);
     } catch (error) {
       console.error("Error completing task:", error);
-      alert("Error completing task");
+      alert(error instanceof Error ? error.message : "Error completing task");
     } finally {
       setIsAssigningChecker(false);
     }
@@ -288,6 +379,7 @@ export default function TaskDetailPage() {
       if (!response.ok) throw new Error("Failed to assign checker");
       const updated = await response.json();
       setTask(updated);
+      await fetchTaskChecks();
 
       const checker = employees.find((e) => e.id === checkerId);
       setCheckerAssignmentMessage(`✓ Checker assigned to ${checker?.name}`);
@@ -395,6 +487,22 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleSendToLevel1Check = () => {
+    if (!task) return;
+
+    // On a resend, default the picker to whoever last checked at the level
+    // it's going to, so the user can keep them or pick someone else.
+    const level = getResendLevel(taskChecks);
+    const lastChecker =
+      [...taskChecks]
+        .reverse()
+        .find((c) => c.check_level === level && c.status !== "reassigned")?.checker_id ?? null;
+
+    setSelectedChecker(lastChecker);
+    setCheckerAssignmentOption(lastChecker ? "now" : null);
+    setShowCheckerAssignment(true);
+  };
+
   const handleSubtasksChange = (updatedSubtasks: Subtask[]) => {
     if (task) {
       setTask({ ...task, subtasks: updatedSubtasks });
@@ -461,6 +569,22 @@ export default function TaskDetailPage() {
       .join("")
       .toUpperCase();
   };
+
+  const checkStatus = effectiveCheckStatus(task.check_status, taskChecks);
+  const isCompleted = task.status === "completed";
+  const isApproved = checkStatus === "approved" && !isCompleted;
+  const checklistLocked = isCompleted || (isChecklistLocked(checkStatus) && !isApproved);
+  const readyToComplete = isApproved && canCompleteTask(checkStatus, task.subtasks);
+  const resendLevel = checkStatus === "rejected" ? getResendLevel(taskChecks) : 1;
+  // A direct Level 2 resend can only go to a manager/admin who didn't do
+  // the Level 1 check.
+  const lastLevel1Approver = [...taskChecks]
+    .reverse()
+    .find((c) => c.check_level === 1 && c.status === "approved")?.checker_id;
+  const checkerOptions =
+    resendLevel === 2 ? reviewers.filter((r) => r.id !== lastLevel1Approver) : employees;
+  const openCheck = [...taskChecks].reverse().find((c) => c.status === "in_progress");
+  const canSendForCheck = !isCompleted && (task.status !== "done" || checkStatus === "rejected");
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -538,13 +662,15 @@ export default function TaskDetailPage() {
             <div>
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Tax Period</p>
               <select
-                value={task.tax_period || "25-26"}
+                value={task.tax_period || TAX_PERIODS[10]}
                 onChange={(e) => handleTaxPeriodChange(e.target.value)}
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-400 dark:bg-gray-600 dark:text-white text-sm font-semibold"
               >
-                <option value="25-26">25-26</option>
-                <option value="24-25">24-25</option>
-                <option value="23-24">23-24</option>
+                {TAX_PERIODS.map((period) => (
+                  <option key={period} value={period}>
+                    {period}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -557,9 +683,9 @@ export default function TaskDetailPage() {
               <select
                 value={task.status}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                disabled={userClassification !== "admin" && task.status === "done"}
+                disabled={userClassification !== "admin" && (task.status === "done" || task.status === "completed")}
                 className={`w-full px-3 py-2 rounded-md font-semibold text-sm border-0 focus:outline-none focus:ring-2 focus:ring-accent-400 ${
-                  userClassification !== "admin" && task.status === "done" ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                  userClassification !== "admin" && (task.status === "done" || task.status === "completed") ? "cursor-not-allowed opacity-60" : "cursor-pointer"
                 } ${
                   STATUS_COLORS[task.status] || STATUS_COLORS["todo"]
                 } dark:text-white`}
@@ -567,6 +693,11 @@ export default function TaskDetailPage() {
                 <option value="todo">To do</option>
                 <option value="prog">In progress</option>
                 {userClassification === "admin" && <option value="done">Done</option>}
+                {task.status === "completed" && (
+                  <option value="completed" disabled>
+                    Completed
+                  </option>
+                )}
               </select>
               {userClassification !== "admin" && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -633,11 +764,15 @@ export default function TaskDetailPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4 dark:bg-gray-700">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                Mark Task as Done
+                {checkStatus === "rejected" ? "Resend for Checking" : "Mark Task as Done"}
               </h3>
 
               <p className="text-sm text-gray-700 dark:text-gray-300 mb-6">
-                Would you like to assign a checker now, or do it later?
+                {checkStatus === "rejected" && resendLevel === 2
+                  ? "The Level 2 checker asked for this to come straight back to Level 2. Keep the same checker or pick a different one."
+                  : checkStatus === "rejected"
+                  ? "This goes to a Level 1 check. Keep the same checker or pick a different one, or decide later."
+                  : "Would you like to assign a checker now, or do it later?"}
               </p>
 
               {/* Radio Options */}
@@ -661,6 +796,7 @@ export default function TaskDetailPage() {
                 </label>
 
                 {/* Option 2: Assign Later */}
+                {resendLevel === 1 && (
                 <label className="flex items-start gap-3 p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 cursor-pointer">
                   <input
                     type="radio"
@@ -677,13 +813,14 @@ export default function TaskDetailPage() {
                     </p>
                   </div>
                 </label>
+                )}
               </div>
 
               {/* Checker Dropdown (shown when option 1 selected) */}
               {checkerAssignmentOption === "now" && (
                 <div className="mb-6">
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Who should check this?
+                    {resendLevel === 2 ? "Level 2 checker" : "Who should check this?"}
                   </label>
                   <select
                     value={selectedChecker || ""}
@@ -691,7 +828,7 @@ export default function TaskDetailPage() {
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-600 dark:text-white"
                   >
                     <option value="">Select a checker...</option>
-                    {employees.map((emp) => (
+                    {checkerOptions.map((emp) => (
                       <option key={emp.id} value={emp.id}>
                         {emp.name}
                       </option>
@@ -733,8 +870,79 @@ export default function TaskDetailPage() {
           </div>
         )}
 
+        {/* Rejected by checker — needs rework */}
+        {checkStatus === "rejected" && (() => {
+          const rejections = taskChecks.filter((c) => c.status === "rejected");
+          const latest = rejections[rejections.length - 1];
+          return (
+            <div className="bg-red-50 dark:bg-red-900 border-l-4 border-red-500 p-4 rounded">
+              <div className="flex items-start gap-3">
+                <span className="text-xl">✗</span>
+                <div className="flex-1">
+                  <p className="font-semibold text-red-800 dark:text-red-200">
+                    Sent back for rework
+                    {latest ? ` by ${latest.checker_name} (Level ${latest.check_level} check)` : ""}
+                  </p>
+                  {latest?.notes && (
+                    <p className="text-sm text-red-700 dark:text-red-300 mt-1 whitespace-pre-wrap">
+                      {latest.notes}
+                    </p>
+                  )}
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-2">
+                    Fix the checklist and send it for checking again below.{" "}
+                    {resendLevel === 2
+                      ? `The Level 2 checker asked for it to come straight back to Level 2${
+                          latest ? ` (${latest.checker_name})` : ""
+                        } — no Level 1 check needed.`
+                      : latest?.check_level === 2
+                      ? "The Level 2 checker asked for the full check again, starting at Level 1."
+                      : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Currently with a checker */}
+        {(checkStatus === "checking_level1" || checkStatus === "checking_level2") && (() => {
+          const level = checkStatus === "checking_level1" ? 1 : 2;
+          const active = [...taskChecks]
+            .reverse()
+            .find((c) => c.check_level === level && c.status === "in_progress");
+          return (
+            <div className="bg-blue-50 dark:bg-blue-900 border-l-4 border-blue-500 p-4 rounded">
+              <p className="font-semibold text-blue-800 dark:text-blue-200">
+                With {active?.checker_name ?? "a checker"} for Level {level} check
+              </p>
+              {level === 2 && (
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                  Level 1 check approved.
+                </p>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Fully approved */}
+        {checkStatus === "approved" && (() => {
+          const finalCheck = [...taskChecks]
+            .reverse()
+            .find((c) => c.check_level === 2 && c.status === "approved");
+          return (
+            <div className="bg-green-50 dark:bg-green-900 border-l-4 border-green-500 p-4 rounded">
+              <p className="font-semibold text-green-800 dark:text-green-200">
+                ✓ Approved{finalCheck ? ` by ${finalCheck.checker_name} at Level 2` : ""}
+              </p>
+              <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                Both checking levels are complete.
+              </p>
+            </div>
+          );
+        })()}
+
         {/* Checker Not Assigned Warning */}
-        {task.status === "done" && task.check_status === "waiting_for_checker" && (
+        {task.status === "done" && checkStatus === "waiting_for_checker" && (
           <div className="bg-red-50 dark:bg-red-900 border-l-4 border-red-500 p-4 rounded">
             <div className="flex items-start gap-3">
               <span className="text-xl">⚠️</span>
@@ -775,6 +983,53 @@ export default function TaskDetailPage() {
           </div>
         )}
 
+        {/* Check history - every Level 1/2 round, its outcome and notes */}
+        {taskChecks.length > 0 && (
+          <div className="bg-white dark:bg-gray-700 rounded-md shadow border border-gray-200 dark:border-gray-600 p-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">📝 Check History</h2>
+            <div className="space-y-3">
+              {taskChecks.map((c) => {
+                const result = CHECK_RESULTS[c.status];
+                const date = new Date(c.approved_at || c.created_at).toLocaleDateString("en-IN");
+                return (
+                  <div
+                    key={c.id}
+                    className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        Level {c.check_level} — {c.checker_name}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {c.approved_at ? "Approved" : "Assigned"} {date}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            result?.className ?? "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {result?.label ?? c.status}
+                        </span>
+                      </div>
+                    </div>
+                    {c.status === "rejected" && c.check_level === 2 && (
+                      <p className="text-xs font-semibold text-red-700 dark:text-red-300 mt-2">
+                        Resend goes to: {c.resend_level === 2 ? "Level 2 directly" : "Level 1 check"}
+                      </p>
+                    )}
+                    {c.notes && (
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 whitespace-pre-wrap">
+                        {c.notes}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Payments Section */}
         <div className="bg-white dark:bg-gray-700 rounded-md shadow border border-gray-200 dark:border-gray-600 p-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">💰 Payments</h2>
@@ -796,7 +1051,7 @@ export default function TaskDetailPage() {
 
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">✓ Checklist</h2>
-            {!hasSubtasks && (
+            {!hasSubtasks && !checklistLocked && (
               <button
                 onClick={handleGenerateChecklist}
                 className="px-4 py-2 bg-primary-600 dark:bg-primary-700 text-white rounded-md hover:bg-primary-700 dark:hover:bg-primary-800 transition text-sm font-semibold whitespace-nowrap"
@@ -811,7 +1066,63 @@ export default function TaskDetailPage() {
             taskTitle={task.title}
             subtasks={task.subtasks}
             onSubtasksChange={handleSubtasksChange}
+            locked={checklistLocked}
+            frozenIds={isApproved ? verifiedIds : undefined}
+            lockMessage={isCompleted ? "✓ This task is completed and closed." : undefined}
           />
+
+          {/* Send for Level 1 Check */}
+          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
+            {!canSendForCheck ? (
+              <p
+                className={`text-sm font-semibold ${
+                  checkStatus === "approved"
+                    ? "text-green-700 dark:text-green-400"
+                    : "text-blue-700 dark:text-blue-300"
+                }`}
+              >
+                {isCompleted
+                  ? "✓ Task completed"
+                  : checkStatus === "approved"
+                  ? "✓ Approved — both checking levels complete"
+                  : checkStatus === "checking_level1" || checkStatus === "checking_level2"
+                  ? `With ${openCheck?.checker_name ?? "a checker"} for Level ${
+                      checkStatus === "checking_level1" ? 1 : 2
+                    } check`
+                  : checkStatus === "waiting_for_checker"
+                  ? "Waiting for a checker to be assigned"
+                  : "✓ Sent for checking"}
+              </p>
+            ) : null}
+
+            {isApproved && (
+              <div className="mt-4">
+                {readyToComplete ? (
+                  <button
+                    onClick={handleCompleteTask}
+                    disabled={isCompleting}
+                    className="px-5 py-2 rounded-md font-semibold text-sm transition bg-primary-600 dark:bg-primary-700 text-white hover:bg-primary-700 dark:hover:bg-primary-800 disabled:opacity-50"
+                  >
+                    {isCompleting ? "Completing..." : "✓ Mark Task Completed"}
+                  </button>
+                ) : (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Tick off the remaining{" "}
+                    {(task.subtasks || []).filter((s) => !s.done).length} step(s) above to complete this task.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {canSendForCheck && (
+              <button
+                onClick={handleSendToLevel1Check}
+                className="px-5 py-2 rounded-md font-semibold text-sm transition bg-success-500 dark:bg-green-700 text-white hover:bg-green-700 dark:hover:bg-green-800"
+              >
+                {checkStatus === "rejected" ? `Resend for Level ${resendLevel} Check` : "Send for Level 1 Check"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

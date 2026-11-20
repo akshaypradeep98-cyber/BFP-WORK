@@ -13,7 +13,6 @@ interface Employee {
   classification: string;
   specialisation: string;
   date_of_birth: string;
-  weekly_capacity: number;
   on_leave: boolean;
   avatar_color: string;
 }
@@ -52,7 +51,6 @@ export default function EmployeeModal({
         classification: "",
         specialisation: "",
         date_of_birth: "",
-        weekly_capacity: 40,
         on_leave: false,
       });
       setPassword("");
@@ -299,23 +297,6 @@ export default function EmployeeModal({
                     : ""
                 }
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350]"
-                disabled={isSaving}
-              />
-            </div>
-
-            {/* Weekly Capacity */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Weekly Capacity (hours)
-              </label>
-              <input
-                type="number"
-                name="weekly_capacity"
-                value={formData.weekly_capacity || 40}
-                onChange={handleChange}
-                min="0"
-                max="168"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1C3350]"
                 disabled={isSaving}
               />

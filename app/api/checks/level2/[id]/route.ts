@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRequestClient } from "@/lib/supabase/server";
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
+import { level2CheckerError } from "@/lib/checkers";
 
 
 export async function GET(
@@ -48,14 +49,17 @@ export async function GET(
       .eq("id", check.checker_id)
       .single();
 
-    // Get Level 1 check
+    // Latest approved Level 1 check: earlier rounds may also be approved
+    // if Level 2 sent the task back and it went through Level 1 again.
     const { data: level1Check } = await supabase
       .from("task_checks")
       .select("*")
       .eq("task_id", check.task_id)
       .eq("check_level", 1)
       .eq("status", "approved")
-      .single();
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     let level1Checker = null;
     if (level1Check) {
@@ -93,7 +97,7 @@ export async function PUT(
   try {
     const supabase = await createRequestClient();
     const { id } = await params;
-    const { action, notes, new_checker_id } = await request.json();
+    const { action, notes, new_checker_id, resend_level } = await request.json();
 
     if (action === "approve") {
       const { data: check } = await supabase
@@ -105,14 +109,27 @@ export async function PUT(
       // Update check
       await supabase
         .from("task_checks")
-        .update({ status: "approved", notes })
+        .update({ status: "approved", notes, approved_at: new Date().toISOString() })
         .eq("id", id);
 
-      // Mark task as approved
-      await supabase
+      // Mark task as approved. A Level 2 checker who isn't admin/manager
+      // or the task's own assignee can't pass tasks_update RLS (and the
+      // enforce_task_update_scope trigger) — see the matching note in
+      // /api/checks/level1/[id] — so this goes through the admin client.
+      const { error: taskError } = await createAdminClient()
         .from("tasks")
         .update({ check_status: "approved", status: "done" })
         .eq("id", check.task_id);
+
+      if (taskError) {
+        // Undo the check change so the check and the task never disagree.
+        console.error("Task stage update failed:", taskError);
+        await supabase
+          .from("task_checks")
+          .update({ status: "in_progress", approved_at: null })
+          .eq("id", id);
+        return NextResponse.json({ error: `Couldn't update the task: ${taskError.message}` }, { status: 500 });
+      }
 
       return NextResponse.json({ success: true });
     }
@@ -124,15 +141,34 @@ export async function PUT(
         .eq("id", id)
         .single();
 
-      await supabase
+      if (resend_level !== undefined && resend_level !== 1 && resend_level !== 2) {
+        return NextResponse.json({ error: "resend_level must be 1 or 2" }, { status: 400 });
+      }
+
+      const { error: rejectError } = await supabase
         .from("task_checks")
-        .update({ status: "rejected", notes })
+        .update({ status: "rejected", notes, resend_level: resend_level ?? 1 })
         .eq("id", id);
 
-      await supabase
+      if (rejectError) {
+        return NextResponse.json({ error: rejectError.message }, { status: 500 });
+      }
+
+      // Same RLS/trigger gap as the approve path above.
+      const { error: taskError } = await createAdminClient()
         .from("tasks")
-        .update({ check_status: "pending" })
+        .update({ check_status: "rejected", status: "prog" })
         .eq("id", check.task_id);
+
+      if (taskError) {
+        // Undo the check change so the check and the task never disagree.
+        console.error("Task stage update failed:", taskError);
+        await supabase
+          .from("task_checks")
+          .update({ status: "in_progress", approved_at: null })
+          .eq("id", id);
+        return NextResponse.json({ error: `Couldn't update the task: ${taskError.message}` }, { status: 500 });
+      }
 
       return NextResponse.json({ success: true });
     }
@@ -143,6 +179,20 @@ export async function PUT(
         .select("*")
         .eq("id", id)
         .single();
+
+      if (!check) {
+        return NextResponse.json({ error: "Check not found" }, { status: 404 });
+      }
+
+      const checkerError = await level2CheckerError(check.task_id, new_checker_id);
+      if (checkerError) {
+        return NextResponse.json({ error: checkerError }, { status: 400 });
+      }
+
+      await supabase
+        .from("task_checks")
+        .update({ status: "reassigned" })
+        .eq("id", id);
 
       await supabase
         .from("task_checks")

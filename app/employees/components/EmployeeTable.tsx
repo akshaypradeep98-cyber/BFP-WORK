@@ -11,7 +11,6 @@ interface Employee {
   classification: string;
   specialisation: string;
   date_of_birth: string;
-  weekly_capacity: number;
   on_leave: boolean;
   avatar_color: string;
 }

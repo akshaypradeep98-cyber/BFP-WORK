@@ -71,6 +71,8 @@ export default function Level1CheckPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [showReassignDropdown, setShowReassignDropdown] = useState(false);
+  const [reviewers, setReviewers] = useState<Employee[]>([]);
+  const [level2CheckerId, setLevel2CheckerId] = useState<number | null>(null);
 
   // Load pending checks
   useEffect(() => {
@@ -92,11 +94,17 @@ export default function Level1CheckPage() {
           setPendingChecks(data || []);
         }
 
-        // Get employees for reassignment
-        const empResponse = await fetch("/api/employees/directory");
+        // Get employees for reassignment, and managers/admins for Level 2
+        const [empResponse, reviewerResponse] = await Promise.all([
+          fetch("/api/employees/directory"),
+          fetch("/api/employees/directory?role=reviewer"),
+        ]);
         if (empResponse.ok) {
           const empData = await empResponse.json();
           setEmployees(empData || []);
+        }
+        if (reviewerResponse.ok) {
+          setReviewers((await reviewerResponse.json()) || []);
         }
       } catch (error) {
         console.error("Error loading:", error);
@@ -171,9 +179,16 @@ export default function Level1CheckPage() {
     load();
   }, [selectedCheckId]);
 
+  // Only steps the staff member ticked as done can be verified
+  const doneSubtasks = subtasks.filter((s) => s.done);
+  const notDoneCount = subtasks.length - doneSubtasks.length;
+  const verifiedCount = doneSubtasks.filter((s) => verifications.has(s.id)).length;
+  const allDoneVerified = doneSubtasks.length > 0 && verifiedCount === doneSubtasks.length;
+
   // Toggle verification
   const handleVerifySubtask = async (subtaskId: number) => {
     if (!selectedCheckId || !check) return;
+    if (!subtasks.find((s) => s.id === subtaskId)?.done) return;
 
     const newVerifications = new Set(verifications);
     const shouldAdd = !newVerifications.has(subtaskId);
@@ -189,7 +204,7 @@ export default function Level1CheckPage() {
 
     // Save to server
     try {
-      await fetch("/api/subtask-verifications", {
+      const response = await fetch("/api/subtask-verifications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -198,8 +213,13 @@ export default function Level1CheckPage() {
           verified: shouldAdd,
         }),
       });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Couldn't save the verification");
+      }
     } catch (error) {
       console.error("Error saving verification:", error);
+      alert(error instanceof Error ? error.message : "Couldn't save the verification");
       // Revert on error
       setVerifications(verifications);
     }
@@ -230,8 +250,12 @@ export default function Level1CheckPage() {
 
   // Approve
   const handleApprove = async () => {
-    if (!selectedCheckId || verifications.size !== subtasks.length) {
-      alert("Please verify all subtasks before approving");
+    if (!selectedCheckId || !allDoneVerified) {
+      alert("Please verify every step the staff member ticked before approving");
+      return;
+    }
+    if (!level2CheckerId) {
+      alert("Pick who will do the Level 2 check");
       return;
     }
 
@@ -243,6 +267,7 @@ export default function Level1CheckPage() {
         body: JSON.stringify({
           action: "approve",
           notes,
+          level2_checker_id: level2CheckerId,
         }),
       });
 
@@ -251,8 +276,10 @@ export default function Level1CheckPage() {
         throw new Error(error.error);
       }
 
-      alert("Check approved! Task moved to Level 2");
+      const l2Name = reviewers.find((r) => r.id === level2CheckerId)?.name;
+      alert(`Check approved! Task sent to ${l2Name ?? "the Level 2 checker"} for Level 2`);
       setSelectedCheckId(null);
+      setLevel2CheckerId(null);
       // Refresh pending checks
       const res = await fetch("/api/checks/level1");
       if (res.ok) setPendingChecks(await res.json());
@@ -433,7 +460,7 @@ export default function Level1CheckPage() {
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Progress</p>
                     <p className="font-semibold text-blue-600">
-                      {verifications.size}/{subtasks.length} verified
+                      {verifiedCount}/{doneSubtasks.length} verified
                     </p>
                   </div>
                 </div>
@@ -446,7 +473,7 @@ export default function Level1CheckPage() {
                     className="bg-blue-600 h-full rounded-full transition-all"
                     style={{
                       width: `${
-                        subtasks.length > 0 ? (verifications.size / subtasks.length) * 100 : 0
+                        doneSubtasks.length > 0 ? (verifiedCount / doneSubtasks.length) * 100 : 0
                       }%`,
                     }}
                   ></div>
@@ -458,17 +485,32 @@ export default function Level1CheckPage() {
                 <h3 className="text-lg font-bold text-gray-900 mb-4">
                   ✔ Verify Subtasks
                 </h3>
+                {notDoneCount > 0 && (
+                  <p className="mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                    {notDoneCount} step{notDoneCount === 1 ? " wasn't" : "s weren't"} ticked as done by the staff
+                    member, so {notDoneCount === 1 ? "it" : "they"} can&apos;t be verified. Reject the check if
+                    {notDoneCount === 1 ? " it's" : " they're"} needed.
+                  </p>
+                )}
                 <div className="space-y-2">
                   {subtasks.map((subtask) => (
                     <div
                       key={subtask.id}
-                      className="flex items-start gap-3 p-3 bg-white rounded border border-blue-200 hover:bg-blue-50"
+                      className={`flex items-start gap-3 p-3 rounded border ${
+                        subtask.done
+                          ? "bg-white border-blue-200 hover:bg-blue-50"
+                          : "bg-amber-50 border-amber-200"
+                      }`}
                     >
                       <input
                         type="checkbox"
-                        checked={verifications.has(subtask.id)}
+                        checked={subtask.done && verifications.has(subtask.id)}
                         onChange={() => handleVerifySubtask(subtask.id)}
-                        className="mt-1 w-5 h-5 text-blue-600 rounded cursor-pointer"
+                        disabled={!subtask.done}
+                        title={subtask.done ? undefined : "Not ticked as done by the staff member"}
+                        className={`mt-1 w-5 h-5 text-blue-600 rounded ${
+                          subtask.done ? "cursor-pointer" : "cursor-not-allowed"
+                        }`}
                       />
                       <div className="flex-1">
                         <p className="font-medium text-gray-900">{subtask.title}</p>
@@ -476,9 +518,11 @@ export default function Level1CheckPage() {
                           Time: {formatTime(subtask.seconds)}
                         </p>
                       </div>
-                      {verifications.has(subtask.id) && (
+                      {!subtask.done ? (
+                        <span className="text-xs text-gray-500 font-semibold whitespace-nowrap">Not done by staff</span>
+                      ) : verifications.has(subtask.id) ? (
                         <span className="text-xs text-green-600 font-semibold">✓ Verified</span>
-                      )}
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -505,11 +549,33 @@ export default function Level1CheckPage() {
               {/* Actions */}
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Level 2 checker
+                    </label>
+                    <select
+                      value={level2CheckerId ?? ""}
+                      onChange={(e) => setLevel2CheckerId(e.target.value ? parseInt(e.target.value) : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1C3350]"
+                    >
+                      <option value="">Select a manager or admin...</option>
+                      {reviewers
+                        .filter((r) => r.id !== check.checker_id)
+                        .map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      You can&apos;t do the Level 2 check on a task you checked at Level 1.
+                    </p>
+                  </div>
                   <button
                     onClick={handleApprove}
-                    disabled={isSaving || verifications.size !== subtasks.length}
+                    disabled={isSaving || !allDoneVerified || !level2CheckerId}
                     className={`w-full py-3 rounded font-semibold text-white transition ${
-                      verifications.size === subtasks.length
+                      allDoneVerified && level2CheckerId
                         ? "bg-green-600 hover:bg-green-700"
                         : "bg-gray-400 cursor-not-allowed"
                     }`}

@@ -43,6 +43,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Attendance: one row per login; logout fills in logout_at.
+    const { error: attendanceError } = await admin
+      .from("attendance")
+      .insert({ employee_id: employee.id, login_at: new Date().toISOString() });
+    if (attendanceError) console.error("Couldn't record login:", attendanceError.message);
+
     const res = NextResponse.json({
       employee_id: employee.id,
       name: employee.name,

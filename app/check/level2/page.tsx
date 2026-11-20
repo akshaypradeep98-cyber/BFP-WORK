@@ -62,6 +62,7 @@ export default function Level2ApprovalsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [showReassignDropdown, setShowReassignDropdown] = useState(false);
+  const [resendLevel, setResendLevel] = useState<1 | 2>(1);
 
   // Load approvals
   useEffect(() => {
@@ -81,7 +82,7 @@ export default function Level2ApprovalsPage() {
           setPendingApprovals(await response.json());
         }
 
-        const empResponse = await fetch("/api/employees/directory");
+        const empResponse = await fetch("/api/employees/directory?role=reviewer");
         if (empResponse.ok) {
           setEmployees(await empResponse.json());
         }
@@ -191,12 +192,21 @@ export default function Level2ApprovalsPage() {
         body: JSON.stringify({
           action: "reject",
           notes: approvalNotes,
+          resend_level: resendLevel,
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to reject");
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to reject");
+      }
 
-      alert("Approval rejected");
+      alert(
+        resendLevel === 2
+          ? "Sent back for rework. The resend will come straight back to Level 2."
+          : "Sent back for rework. The resend will start again at a Level 1 check."
+      );
+      setResendLevel(1);
       setSelectedApprovalId(null);
       const res = await fetch("/api/checks/level2");
       if (res.ok) setPendingApprovals(await res.json());
@@ -221,7 +231,10 @@ export default function Level2ApprovalsPage() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to reassign");
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to reassign");
+      }
 
       alert("Approval reassigned");
       setSelectedApprovalId(null);
@@ -394,6 +407,36 @@ export default function Level2ApprovalsPage() {
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-20"
                     />
                   </div>
+
+                  <fieldset className="border border-red-200 bg-red-50 rounded-lg p-4">
+                    <legend className="px-1 text-sm font-semibold text-red-800">
+                      If rejecting: after rework, send it to
+                    </legend>
+                    <label className="flex items-start gap-3 mt-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="resend-level"
+                        checked={resendLevel === 1}
+                        onChange={() => setResendLevel(1)}
+                        className="mt-1 w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-800">
+                        <span className="font-semibold">Level 1 check</span> — the full check starts again
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-3 mt-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="resend-level"
+                        checked={resendLevel === 2}
+                        onChange={() => setResendLevel(2)}
+                        className="mt-1 w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-800">
+                        <span className="font-semibold">Straight back to Level 2</span> — skip Level 1 for the resend
+                      </span>
+                    </label>
+                  </fieldset>
                 </div>
               </div>
 
@@ -432,7 +475,7 @@ export default function Level2ApprovalsPage() {
                       {showReassignDropdown && (
                         <div className="absolute top-full mt-1 w-full bg-white border border-gray-300 rounded shadow-lg z-10">
                           {employees
-                            .filter((e) => e.id !== approval.checker_id)
+                            .filter((e) => e.id !== approval.checker_id && e.id !== level1Check?.checker_id)
                             .map((emp) => (
                               <button
                                 key={emp.id}

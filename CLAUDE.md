@@ -29,14 +29,16 @@ Web-based practice management system for Chartered Accountant (CA) firms. Handle
 - `task_checks` — checking records: task_id, check_level, checker_id, status, notes (no updated_at column)
 - `subtask_verifications` — subtask_id, check_id, verified, verified_at
 - `appointments` — task_id, employee_id, manager_id, check_type, status, scheduled_at, completed_at (API maps scheduled_at to appointment_date/appointment_time)
-- `clients`, `client_kmp`, `divisions`, `payments`, `dsc_register`, `activity_log`, `leave_requests`, `attendance`
+- `clients`, `client_kmp`, `divisions`, `payments`, `dsc_register`, `activity_log`, `leave_requests`
+- `attendance` — one row per login (login_at), logout_at set by /api/auth/logout; blank if never logged out
+- `time_entries` — dated log of time changes on steps (seconds = change); powers the daily work report
 - Full reference that matches the live project: `DATABASE_SCHEMA.sql`. The other `*_SETUP.sql` files are historical and partly out of date.
 
 ## Role-Based Access
 - **Admin**: full access — create tasks, manage templates, approve checks, all pages
 - **Manager**: team oversight, Level 2 approvals, appointments, leave approval — CANNOT create tasks
 - **Article/Staff**: own tasks only, can do Level 1 checks
-- Admin-only pages (`/templates`, `/employees`, `/billing`, `/reports`, `/invoices`, `/dsc`, `/activity`) redirect non-admins to `/dashboard`; `/check/level2` and `/manager/*` need manager or admin
+- Admin-only pages (`/templates`, `/employees`, `/billing`, `/invoices`, `/dsc`, `/activity`) redirect non-admins to `/dashboard`; `/check/level2`, `/manager/*` and `/reports` (daily work report) need manager or admin
 - `middleware.ts` enforces this server-side on every page and API route (401/403 for APIs, redirect for pages). It deliberately has NO `config.matcher` export: Next 15.5 silently skipped the middleware when one was present, so static paths are filtered inside the function.
 - Navbar links come from `getNavLinks()` in `lib/auth.ts` and are rendered by `components/NavbarRefined.tsx` on every page
 - Employee API responses never include `password_hash` (`omitPasswordHash()` in `lib/auth.ts`)

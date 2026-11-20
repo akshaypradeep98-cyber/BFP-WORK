@@ -75,6 +75,7 @@ export function getNavLinks(classification: Classification) {
     { href: "/check/level1", label: "Check L1" },
     { href: "/calendar", label: "Calendar" },
     { href: "/appointments", label: "Appointments" },
+    { href: "/bank-accounts", label: "Bank Accounts" },
     { href: "/leave", label: "Leave" },
     { href: "/attendance", label: "Attendance" },
   ];
@@ -82,6 +83,7 @@ export function getNavLinks(classification: Classification) {
   const managerLinks = [
     { href: "/check/level2", label: "Check L2" },
     { href: "/manager/appointments", label: "Approvals" },
+    { href: "/reports", label: "Reports" },
   ];
 
   const adminLinks = [
@@ -90,7 +92,6 @@ export function getNavLinks(classification: Classification) {
     { href: "/employees", label: "Employees" },
     { href: "/invoices", label: "Invoices" },
     { href: "/billing", label: "Billing" },
-    { href: "/reports", label: "Reports" },
     { href: "/dsc", label: "DSC" },
     { href: "/activity", label: "Activity" },
   ];

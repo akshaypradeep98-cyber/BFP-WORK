@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   expense INTEGER DEFAULT 0,
   tax_period VARCHAR(10) DEFAULT '25-26',
   status VARCHAR(50) DEFAULT 'todo',          -- todo | prog | done
-  check_status VARCHAR(50) DEFAULT 'pending', -- pending | waiting_for_checker | checking_level1 | checking_level2 | approved
+  check_status VARCHAR(50) DEFAULT 'pending', -- pending | waiting_for_checker | checking_level1 | checking_level2 | approved | rejected
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -97,9 +97,11 @@ CREATE TABLE IF NOT EXISTS task_checks (
   task_id BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   checker_id BIGINT NOT NULL REFERENCES employees(id),
   check_level INTEGER NOT NULL,                      -- 1 | 2
-  status VARCHAR(50) NOT NULL DEFAULT 'in_progress', -- in_progress | approved | rejected
+  status VARCHAR(50) NOT NULL DEFAULT 'in_progress', -- in_progress | approved | rejected | reassigned
   notes TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW(),
+  approved_at TIMESTAMP,
+  resend_level INTEGER CHECK (resend_level IN (1, 2)) -- Level 2 rejections only: where the staff resend goes
 );
 
 CREATE TABLE IF NOT EXISTS subtask_verifications (
@@ -152,6 +154,17 @@ CREATE TABLE IF NOT EXISTS attendance (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Dated history of time logged on steps (seconds = change; resets are negative)
+CREATE TABLE IF NOT EXISTS time_entries (
+  id BIGSERIAL PRIMARY KEY,
+  task_id BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  subtask_id BIGINT REFERENCES subtasks(id) ON DELETE SET NULL,
+  employee_id BIGINT REFERENCES employees(id) ON DELETE SET NULL,
+  seconds INTEGER NOT NULL,
+  logged_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE time_entries ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS activity_log (
   id BIGSERIAL PRIMARY KEY,
   employee_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
@@ -169,6 +182,21 @@ CREATE TABLE IF NOT EXISTS dsc_register (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Firm's own bank accounts. Visible to every employee; add/delete is
+-- admin-only (enforced in middleware.ts via ADMIN_WRITE_APIS), same as
+-- dsc_register.
+CREATE TABLE IF NOT EXISTS bank_accounts (
+  id BIGSERIAL PRIMARY KEY,
+  bank_name VARCHAR(255) NOT NULL,
+  account_number VARCHAR(50) NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Which firm bank account a payment was received into. Added after
+-- bank_accounts so the FK target exists; IF NOT EXISTS makes this a
+-- no-op on deployments that already have the column.
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS bank_account_id BIGINT REFERENCES bank_accounts(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_tasks_employee_id ON tasks(employee_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_template_id ON tasks(template_id);

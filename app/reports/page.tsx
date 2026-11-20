@@ -1,144 +1,241 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import NavbarRefined from "@/components/NavbarRefined";
+import { formatTime } from "@/lib/taskTemplates";
+import type { DailyReportRow } from "@/lib/dailyReport";
+
+const STATUS_LABELS: Record<string, string> = {
+  todo: "To do",
+  prog: "In progress",
+  done: "Done (in checking)",
+  completed: "Completed",
+};
+
+const rupees = (n: number) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0 }).format(n);
+
+function todayLocal() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+}
+
+function formatDay(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function toCsv(rows: DailyReportRow[]) {
+  const header = [
+    "Date",
+    "Staff name",
+    "Log in time",
+    "Log out time",
+    "Client",
+    "Task",
+    "Time spent",
+    "Status",
+    "Fees received",
+    "Full or partial",
+  ];
+  const cell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const lines = rows.map((r) =>
+    [
+      r.date,
+      r.staffName,
+      r.loginTime,
+      r.logoutTime,
+      r.clientName,
+      r.taskTitle,
+      r.seconds ? formatTime(r.seconds) : "",
+      STATUS_LABELS[r.status] || r.status,
+      r.feesReceived || "",
+      r.paymentType,
+    ]
+      .map(cell)
+      .join(",")
+  );
+  return [header.map(cell).join(","), ...lines].join("\n");
+}
 
 export default function ReportsPage() {
-  const router = useRouter();
+  const [from, setFrom] = useState(todayLocal);
+  const [to, setTo] = useState(todayLocal);
+  const [employeeId, setEmployeeId] = useState("");
+  const [rows, setRows] = useState<DailyReportRow[]>([]);
+  const [employees, setEmployees] = useState<{ id: number; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ from, to });
+      if (employeeId) params.set("employee_id", employeeId);
+      const response = await fetch(`/api/reports/daily?${params}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to load the report");
+      }
+      const data = await response.json();
+      setRows(data.rows || []);
+      setEmployees(data.employees || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load the report");
+      setRows([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [from, to, employeeId]);
 
   useEffect(() => {
-    const checkAuth = () => {
-      const empId = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("employee_id="))
-        ?.split("=")[1];
+    if (from && to && to >= from) load();
+  }, [from, to, employeeId, load]);
 
-      const classification = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("employee_classification="))
-        ?.split("=")[1];
+  const downloadCsv = () => {
+    const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `daily-work-${from}${from === to ? "" : `-to-${to}`}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-      if (!empId) {
-        router.push("/login");
-        return;
-      }
-
-      if (classification !== "admin") {
-        router.push("/dashboard");
-        return;
-      }
-
-      setIsLoading(false);
-    };
-
-    checkAuth();
-  }, [router]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50 flex items-center justify-center">
-        <div className="text-slate-600">Loading...</div>
-      </div>
-    );
-  }
-
-  const members = [
-    { name: "Akshay", capacity: "100h", barWidth: "3%" },
-    { name: "Hari", capacity: "60h", barWidth: "3%" },
-    { name: "Treesa", capacity: "80h", barWidth: "3%" },
-  ];
-
-  const taskStatuses = [
-    { label: "To Do", count: "0", color: "bg-slate-400" },
-    { label: "In Progress", count: "0", color: "bg-violet-600" },
-    { label: "In Review", count: "0", color: "bg-amber-500" },
-    { label: "Done", count: "0", color: "bg-green-600" },
-  ];
+  const totalSeconds = rows.reduce((s, r) => s + r.seconds, 0);
+  const totalFees = rows.reduce((s, r) => s + r.feesReceived, 0);
+  const field = "px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
       <NavbarRefined />
 
-      <div className="px-11 py-9">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Reports 📊</h1>
-          <p className="text-slate-600">Utilization and output trends for your team</p>
+      <div className="px-4 sm:px-11 py-9">
+        <div className="mb-6">
+          <h1 className="text-4xl font-bold text-slate-900 mb-2">Daily Work Report 📊</h1>
+          <p className="text-slate-600">Who logged in, what they worked on, and fees received — day by day</p>
         </div>
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-4 gap-6 mb-7">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-500/6">
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Avg Utilization
-            </div>
-            <div className="text-4xl font-bold text-violet-600">0%</div>
-            <div className="text-xs text-green-600 font-bold mt-2">Capacity wide open</div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">From</label>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={field} />
           </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-500/6">
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Tasks Completed
-            </div>
-            <div className="text-4xl font-bold text-green-600">0</div>
-            <div className="text-xs text-slate-600 font-bold mt-2">This month</div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">To</label>
+            <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={field} />
           </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-500/6">
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Active Clients
-            </div>
-            <div className="text-4xl font-bold text-pink-500">4</div>
-            <div className="text-xs text-slate-600 font-bold mt-2">Engaged accounts</div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-violet-500/6">
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Total Capacity
-            </div>
-            <div className="text-4xl font-bold text-amber-500">240h</div>
-            <div className="text-xs text-slate-600 font-bold mt-2">Available weekly</div>
-          </div>
-        </div>
-
-        {/* Charts */}
-        <div className="grid grid-cols-3 gap-6">
-          {/* Capacity by Member */}
-          <div className="col-span-2 bg-white rounded-2xl p-7 shadow-sm border border-violet-500/6">
-            <h2 className="text-lg font-bold text-slate-900 mb-6">Capacity by Member</h2>
-            <div className="space-y-5">
-              {members.map((member) => (
-                <div key={member.name}>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm font-bold text-slate-700">{member.name}</span>
-                    <span className="text-sm font-bold text-slate-900">{member.capacity}</span>
-                  </div>
-                  <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-violet-600 to-pink-500 rounded-full"
-                      style={{ width: member.barWidth }}
-                    ></div>
-                  </div>
-                </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Staff</label>
+            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={field}>
+              <option value="">Everyone</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
-
-          {/* Task Status */}
-          <div className="bg-white rounded-2xl p-7 shadow-sm border border-violet-500/6">
-            <h2 className="text-lg font-bold text-slate-900 mb-6">Task Status</h2>
-            <div className="space-y-4">
-              {taskStatuses.map((status) => (
-                <div key={status.label} className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${status.color}`}></div>
-                  <span className="flex-1 text-sm font-bold text-slate-700">{status.label}</span>
-                  <span className="text-sm font-bold text-slate-900">{status.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <button
+            onClick={() => {
+              const t = todayLocal();
+              setFrom(t);
+              setTo(t);
+            }}
+            className="px-3 py-2 text-sm font-semibold text-violet-700 hover:text-violet-900"
+          >
+            Today
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={downloadCsv}
+            disabled={!rows.length}
+            className="px-4 py-2 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ⬇ Download CSV
+          </button>
         </div>
+
+        {error && <p className="mb-4 text-sm font-semibold text-red-700">{error}</p>}
+
+        <div className="mb-3 text-sm text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
+          <span className="font-semibold">{rows.length} row{rows.length === 1 ? "" : "s"}</span>
+          <span>
+            Time spent: <span className="font-semibold text-slate-800">{formatTime(totalSeconds)}</span>
+          </span>
+          <span>
+            Fees received: <span className="font-semibold text-slate-800">{rupees(totalFees)}</span>
+          </span>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-slate-700">
+              <tr>
+                {["Date", "Staff name", "Log in", "Log out", "Client", "Task", "Time spent", "Status", "Fees received", "Full / partial"].map(
+                  (h) => (
+                    <th key={h} className="px-4 py-3 font-semibold whitespace-nowrap">
+                      {h}
+                    </th>
+                  )
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
+                    Loading...
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
+                    No logins, time or fees recorded for these dates.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r, i) => (
+                  <tr key={`${r.date}-${r.employeeId}-${r.taskId ?? "none"}-${i}`} className="border-t border-slate-100">
+                    <td className="px-4 py-2.5 whitespace-nowrap">{formatDay(r.date)}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-900 whitespace-nowrap">{r.staffName}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">{r.loginTime}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">{r.logoutTime}</td>
+                    <td className="px-4 py-2.5">{r.clientName}</td>
+                    <td className="px-4 py-2.5">
+                      {r.taskId ? (
+                        <a href={`/tasks/${r.taskId}`} className="text-violet-700 hover:underline">
+                          {r.taskTitle}
+                        </a>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">{r.seconds ? formatTime(r.seconds) : ""}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">{STATUS_LABELS[r.status] || r.status}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">{r.feesReceived ? rupees(r.feesReceived) : ""}</td>
+                    <td className="px-4 py-2.5">
+                      {r.paymentType && (
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                            r.paymentType === "Full" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {r.paymentType}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Log out is blank when the person hasn&apos;t logged out. Time spent is recorded day by day from 20 Nov 2026; time logged before then isn&apos;t dated, so it doesn&apos;t appear here.
+        </p>
       </div>
     </div>
   );

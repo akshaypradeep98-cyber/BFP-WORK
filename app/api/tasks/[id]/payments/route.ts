@@ -22,7 +22,7 @@ export async function GET(
 
     const { data, error } = await supabase
       .from("payments")
-      .select("*")
+      .select("*, bank_account:bank_accounts(id, bank_name, account_number)")
       .eq("task_id", taskId)
       .order("payment_date", { ascending: false });
 
@@ -53,7 +53,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { amount, payment_date, mode } = body;
+    const { amount, payment_date, mode, bank_account_id } = body;
 
     const { data, error } = await supabase
       .from("payments")
@@ -62,8 +62,9 @@ export async function POST(
         amount,
         payment_date,
         mode,
+        bank_account_id: bank_account_id || null,
       })
-      .select();
+      .select("*, bank_account:bank_accounts(id, bank_name, account_number)");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

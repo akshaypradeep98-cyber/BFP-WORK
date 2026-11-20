@@ -22,6 +22,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // A checker can only verify a step the staff member ticked as done.
+    if (verified !== false) {
+      const { data: subtask } = await supabase
+        .from("subtasks")
+        .select("done")
+        .eq("id", subtask_id)
+        .maybeSingle();
+      if (!subtask?.done) {
+        return NextResponse.json(
+          { error: "This step wasn't ticked as done by the staff member, so it can't be verified." },
+          { status: 400 }
+        );
+      }
+    }
+
     // Check if verification already exists
     const { data: existing, error: selectError } = await supabase
       .from("subtask_verifications")

@@ -41,7 +41,6 @@ export async function POST(request: NextRequest) {
       classification,
       specialisation,
       date_of_birth,
-      weekly_capacity,
     } = body;
 
     // Validate required fields
@@ -85,7 +84,6 @@ export async function POST(request: NextRequest) {
           classification: classification || null,
           specialisation: specialisation || null,
           date_of_birth: date_of_birth || null,
-          weekly_capacity: weekly_capacity || 40,
           on_leave: false,
           avatar_color: avatarColor,
         },

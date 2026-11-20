@@ -11,7 +11,15 @@ export async function PUT(
     const supabase = await createRequestClient();
     const { id } = await params;
     const body = await request.json();
-    const { status, approved_by } = body;
+    const { status } = body;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: me } = user
+      ? await supabase.from("employees").select("id").eq("auth_user_id", user.id).single()
+      : { data: null };
+    const approved_by = me?.id;
 
     if (!status || !["approved", "rejected"].includes(status)) {
       return NextResponse.json(

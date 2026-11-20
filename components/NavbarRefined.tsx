@@ -43,6 +43,8 @@ export default function NavbarRefined() {
   }
 
   const handleLogout = async () => {
+    // Record the logout time while the session still exists
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     await createBrowserSupabaseClient().auth.signOut();
     document.cookie = "employee_id=; max-age=0; path=/";
     document.cookie = "employee_name=; max-age=0; path=/";

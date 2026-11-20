@@ -1,5 +1,8 @@
 "use client";
 
+import { CHECK_STAGES } from "@/lib/utils";
+import { formatTime } from "@/lib/taskTemplates";
+
 interface Employee {
   id: number;
   name: string;
@@ -27,6 +30,8 @@ interface Task {
   amount: number;
   status: string;
   tax_period?: string;
+  check_status?: string;
+  total_seconds?: number;
 }
 
 interface TaskTableProps {
@@ -64,7 +69,7 @@ export default function TaskTable({
 
   const getDueDateColor = (dueDate: string) => {
     const due = new Date(dueDate);
-    const today = new Date("2026-06-16");
+    const today = new Date();
     const diffTime = due.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -81,6 +86,8 @@ export default function TaskTable({
         return "bg-amber-100 text-amber-800";
       case "done":
         return "bg-green-100 text-green-800";
+      case "completed":
+        return "bg-slate-200 text-slate-700";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -94,6 +101,8 @@ export default function TaskTable({
         return "In progress";
       case "done":
         return "Done";
+      case "completed":
+        return "Completed";
       default:
         return status;
     }
@@ -137,7 +146,13 @@ export default function TaskTable({
               Status
             </th>
             <th className="text-left px-6 py-3 font-semibold text-gray-900 text-sm">
+              Checking
+            </th>
+            <th className="text-left px-6 py-3 font-semibold text-gray-900 text-sm">
               Due
+            </th>
+            <th className="text-left px-6 py-3 font-semibold text-gray-900 text-sm">
+              Time
             </th>
             <th className="text-left px-6 py-3 font-semibold text-gray-900 text-sm">
               Amount
@@ -149,6 +164,7 @@ export default function TaskTable({
             const division = divisions.find((d) => d.id === task.division_id);
             const client = clients.find((c) => c.id === task.client_id);
             const employee = employees.find((e) => e.id === task.employee_id);
+            const checkStage = CHECK_STAGES[task.check_status || ""];
 
             return (
               <tr
@@ -205,10 +221,24 @@ export default function TaskTable({
                     {getStatusLabel(task.status)}
                   </span>
                 </td>
-                <td className={`px-6 py-4 ${getDueDateColor(task.due_date)}`}>
+                <td className="px-6 py-4">
+                  {checkStage ? (
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${checkStage.className}`}
+                    >
+                      {checkStage.label}
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
+                <td className={`px-6 py-4 ${task.status === "completed" ? "text-gray-600" : getDueDateColor(task.due_date)}`}>
                   {task.due_date
                     ? new Date(task.due_date).toLocaleDateString("en-IN")
                     : "—"}
+                </td>
+                <td className="px-6 py-4 text-gray-600 whitespace-nowrap">
+                  {task.total_seconds ? formatTime(task.total_seconds) : "—"}
                 </td>
                 <td className="px-6 py-4 text-gray-600">
                   {task.amount > 0 ? formatRupees(task.amount) : "—"}

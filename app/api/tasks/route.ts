@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRequestClient } from "@/lib/supabase/server";
 import { getSubtasksForTitle } from "@/lib/taskTemplates";
+import { getTaxPeriods } from "@/lib/utils";
 
 
 // GET all tasks (with optional employee_id filter)
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const employeeId = searchParams.get("employee_id");
 
-    let query = supabase.from("tasks").select("*");
+    let query = supabase.from("tasks").select("*, subtasks(seconds)");
 
     // Filter by employee_id if provided
     if (employeeId) {
@@ -23,7 +24,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data);
+    const withTotals = (data || []).map(({ subtasks, ...task }) => ({
+      ...task,
+      total_seconds: (subtasks || []).reduce(
+        (sum: number, s: { seconds: number | null }) => sum + (s.seconds || 0),
+        0
+      ),
+    }));
+
+    return NextResponse.json(withTotals);
   } catch (error) {
     console.error("Error fetching tasks:", error);
     return NextResponse.json(
@@ -55,7 +64,7 @@ export async function POST(request: NextRequest) {
       division_id: division_id || null,
       due_date: due_date || null,
       amount: amount || 0,
-      tax_period: tax_period || "25-26",
+      tax_period: tax_period || getTaxPeriods(0, 0)[0],
       status: "todo",
     };
 

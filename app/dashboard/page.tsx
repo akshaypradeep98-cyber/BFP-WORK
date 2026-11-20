@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NavbarRefined from "@/components/NavbarRefined";
+import TaskSearch from "./components/TaskSearch";
+import { isTaskOpen } from "@/lib/utils";
 
 interface Employee {
   id: number;
@@ -10,7 +12,6 @@ interface Employee {
   avatar_color: string;
   classification: string;
   specialisation: string;
-  weekly_capacity: number;
   on_leave: boolean;
 }
 
@@ -154,21 +155,17 @@ export default function TeamWorkloadDashboard() {
 
   const getOpenTasks = (employeeId: number) => {
     return tasks.filter(
-      (t) => t.employee_id === employeeId && t.status !== "done"
+      (t) => t.employee_id === employeeId && isTaskOpen(t.status)
     );
   };
 
-  // Workload is each employee's real open-task count against a simple
-  // task-count threshold, not a fabricated hours figure — there's no
-  // reliable per-task hour estimate to multiply by, so we don't pretend
-  // one exists. weekly_capacity is still shown, but task count (not
-  // invented hours) drives the free/light/busy/overloaded bucket.
+  // Workload is each employee's open-task count, bucketed into
+  // free/light/busy/overloaded against a simple task-count threshold.
   const TASKS_PER_WEEK_FULL_LOAD = 5;
 
   const calculateWorkload = (employee: Employee): EmployeeWorkload => {
     const openTasks = getOpenTasks(employee.id);
     const taskCount = openTasks.length;
-    const capacity = employee.weekly_capacity || 40;
     const percentage = (taskCount / TASKS_PER_WEEK_FULL_LOAD) * 100;
 
     let status: "free" | "light" | "busy" | "overloaded";
@@ -194,11 +191,11 @@ export default function TeamWorkloadDashboard() {
   };
 
   const openTasksCount = tasks.filter(
-    (t) => t.status !== "done" && !t.employee_id
+    (t) => isTaskOpen(t.status) && !t.employee_id
   ).length;
   const now = new Date();
   const overdueCount = tasks.filter(
-    (t) => t.status !== "done" && t.due_date && new Date(t.due_date) < now
+    (t) => isTaskOpen(t.status) && t.due_date && new Date(t.due_date) < now
   ).length;
   const workloads = employees.map(calculateWorkload);
   const freeStaffCount = workloads.filter(
@@ -272,8 +269,10 @@ export default function TeamWorkloadDashboard() {
           {/* Header */}
           <div className="mb-9">
             <h1 className="text-4xl font-bold text-slate-900 mb-2">Team Workload</h1>
-            <p className="text-slate-600 text-base">Real-time overview of capacity allocation and task distribution</p>
+            <p className="text-slate-600 text-base">Real-time overview of who is working on what</p>
           </div>
+
+          <TaskSearch />
 
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-10">
@@ -310,9 +309,9 @@ export default function TeamWorkloadDashboard() {
             </div>
           </div>
 
-          {/* Team Capacity Card */}
+          {/* Team Workload Card */}
           <div className="bg-white border border-slate-200 rounded-3xl p-7 shadow-sm">
-            <h2 className="text-2xl font-bold text-slate-900 mb-6">Team Capacity</h2>
+            <h2 className="text-2xl font-bold text-slate-900 mb-6">Team Workload</h2>
 
             <div className="space-y-6">
               {employees.map((employee, idx) => {
@@ -335,26 +334,14 @@ export default function TeamWorkloadDashboard() {
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <div className="text-sm font-semibold text-slate-900 mb-1.5">
+                        <div className="text-sm font-semibold text-slate-900">
                           {workload.openTasks} open task{workload.openTasks === 1 ? "" : "s"}
-                        </div>
-                        <div className="w-36 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full transition-all"
-                            style={{
-                              width: `${Math.min(workload.percentage, 100)}%`,
-                              background: `linear-gradient(90deg, ${employee.avatar_color} 0%, ${employee.avatar_color}dd 100%)`,
-                            }}
-                          ></div>
                         </div>
                       </div>
                     </div>
                     <div className="flex gap-2.5 mt-3">
                       <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${getWorkloadBadgeColor(workload.status)}`}>
                         {getWorkloadLabel(workload.status, employee.on_leave)}
-                      </span>
-                      <span className="text-slate-600 text-xs">
-                        {Math.min(workload.percentage, 100).toFixed(0)}% capacity utilized
                       </span>
                     </div>
                   </div>

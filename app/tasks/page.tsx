@@ -6,6 +6,8 @@ import NavbarRefined from "@/components/NavbarRefined";
 import TaskTable from "./components/TaskTable";
 import TaskModal from "./components/TaskModal";
 import WhatsAppNotificationModal from "@/components/WhatsAppNotificationModal";
+import TaskFilters, { applyTaskFilters, DEFAULT_TASK_FILTERS, TaskFilterState } from "./components/TaskFilters";
+import { formatTime } from "@/lib/taskTemplates";
 
 interface Employee {
   id: number;
@@ -33,6 +35,9 @@ interface Task {
   due_date: string;
   amount: number;
   status: string;
+  check_status?: string;
+  tax_period?: string;
+  total_seconds?: number;
 }
 
 export default function TasksPage() {
@@ -42,6 +47,7 @@ export default function TasksPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<TaskFilterState>(DEFAULT_TASK_FILTERS);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -100,9 +106,9 @@ export default function TasksPage() {
         .find((row) => row.startsWith("employee_classification="))
         ?.split("=")[1];
 
-      // For non-admins, filter by employee_id; for admins, show all
+      // Admins and managers see everyone's work; others only their own
       const url =
-        classification === "admin"
+        classification === "admin" || classification === "manager"
           ? "/api/tasks"
           : `/api/tasks?employee_id=${employeeId}`;
 
@@ -213,6 +219,22 @@ export default function TasksPage() {
     );
   }
 
+  const isManagerView = userClassification === "admin" || userClassification === "manager";
+  const completedCount = tasks.filter((t) => t.status === "completed").length;
+  const query = searchQuery.trim().toLowerCase();
+  const visibleTasks = (
+    isManagerView ? applyTaskFilters(tasks, filters) : tasks.filter((t) => t.status !== "completed")
+  ).filter(
+    (t) =>
+      !query ||
+      t.title.toLowerCase().includes(query) ||
+      (clients.find((c) => c.id === t.client_id)?.name || "").toLowerCase().includes(query) ||
+      (employees.find((e) => e.id === t.employee_id)?.name || "").toLowerCase().includes(query)
+  );
+  const totalSeconds = visibleTasks.reduce((sum, t) => sum + (t.total_seconds || 0), 0);
+  const totalAmount = visibleTasks.reduce((sum, t) => sum + (t.amount || 0), 0);
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-orange-50">
       <NavbarRefined />
@@ -241,13 +263,44 @@ export default function TasksPage() {
           placeholder="Search by task title, client, or employee..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 mb-6"
+          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 mb-3"
         />
+
+        {/* Managers/admins: full list of everyone's work with filters,
+            including completed tasks that have left staff lists */}
+        {isManagerView && (
+          <TaskFilters
+            value={filters}
+            onChange={setFilters}
+            tasks={tasks}
+            employees={employees}
+            clients={clients}
+          />
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 text-sm text-slate-600">
+          <span className="font-semibold">
+            {visibleTasks.length} task{visibleTasks.length === 1 ? "" : "s"}
+            {!isManagerView && completedCount > 0 ? ` · ${completedCount} completed hidden` : ""}
+            {isManagerView && completedCount > 0 && !visibleTasks.some((t) => t.status === "completed")
+              ? ` · ${completedCount} completed not shown by the current filters`
+              : ""}
+          </span>
+          {isManagerView && visibleTasks.length > 0 && (
+            <span>
+              Time logged: <span className="font-semibold text-slate-800">{formatTime(totalSeconds)}</span>
+              {" · "}Amount:{" "}
+              <span className="font-semibold text-slate-800">
+                {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0 }).format(totalAmount)}
+              </span>
+            </span>
+          )}
+        </div>
 
         {/* Table */}
         <div className="bg-white rounded-2xl shadow-sm border border-violet-500/6 overflow-hidden">
           <TaskTable
-            tasks={tasks}
+            tasks={visibleTasks}
             employees={employees}
             clients={clients}
             divisions={divisions}

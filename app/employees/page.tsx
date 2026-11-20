@@ -17,7 +17,6 @@ interface Employee {
   classification: string;
   specialisation: string;
   date_of_birth: string;
-  weekly_capacity: number;
   on_leave: boolean;
   avatar_color: string;
 }
@@ -147,7 +146,7 @@ export default function EmployeesPage() {
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h1 className="text-4xl font-bold text-slate-900 mb-2">Employees 👥</h1>
-            <p className="text-slate-600">Your team, their roles and available capacity</p>
+            <p className="text-slate-600">Your team and their roles</p>
           </div>
           <button
             onClick={handleAddClick}

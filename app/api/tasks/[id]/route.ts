@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRequestClient } from "@/lib/supabase/server";
+import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
+import { checklistLockedResponse } from "@/lib/checklistLock";
+import { level2CheckerError } from "@/lib/checkers";
+import { canCompleteTask } from "@/lib/utils";
 import { getSubtasksForTitle } from "@/lib/taskTemplates";
 
 
@@ -61,6 +64,45 @@ export async function PUT(
     const body = await request.json();
     const { status, employee_id, amount, expense, tax_period, check_status, checker_id } = body;
 
+    // A task can be closed only after Level 2 approval with every step done.
+    if (status === "completed") {
+      const admin = createAdminClient();
+      const [{ data: current }, { data: steps }] = await Promise.all([
+        admin.from("tasks").select("check_status").eq("id", parseInt(id)).maybeSingle(),
+        admin.from("subtasks").select("done").eq("task_id", parseInt(id)),
+      ]);
+      if (!canCompleteTask(current?.check_status, steps)) {
+        return NextResponse.json(
+          { error: "A task can be completed only after Level 2 approval, with every step ticked." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // A resend may skip Level 1 only when the Level 2 checker who sent it
+    // back chose that.
+    if (check_status === "checking_level2") {
+      const { data: lastRejection } = await createAdminClient()
+        .from("task_checks")
+        .select("check_level, resend_level")
+        .eq("task_id", parseInt(id))
+        .eq("status", "rejected")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastRejection?.check_level !== 2 || lastRejection?.resend_level !== 2) {
+        return NextResponse.json(
+          { error: "This task has to go through a Level 1 check first." },
+          { status: 400 }
+        );
+      }
+      const checkerError = await level2CheckerError(parseInt(id), checker_id);
+      if (checkerError) {
+        return NextResponse.json({ error: checkerError }, { status: 400 });
+      }
+    }
+
     const updateData: any = {};
     if (status) updateData.status = status;
     if (employee_id) updateData.employee_id = employee_id;
@@ -81,14 +123,14 @@ export async function PUT(
     }
 
     // If assigning a checker, create task_check record
-    if (check_status === "checking_level1" && checker_id) {
+    if ((check_status === "checking_level1" || check_status === "checking_level2") && checker_id) {
       const { error: checkError } = await supabase
         .from("task_checks")
         .insert([
           {
             task_id: parseInt(id),
             checker_id,
-            check_level: 1,
+            check_level: check_status === "checking_level2" ? 2 : 1,
             status: "in_progress",
           },
         ]);
@@ -121,6 +163,9 @@ export async function POST(
     const { action } = body;
 
     if (action === "generate-checklist") {
+      const locked = await checklistLockedResponse(parseInt(id));
+      if (locked) return locked;
+
       // Get the task to read its title
       const { data: task, error: taskError } = await supabase
         .from("tasks")

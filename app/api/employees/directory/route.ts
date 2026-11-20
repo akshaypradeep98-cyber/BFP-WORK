@@ -4,9 +4,10 @@ import { createAdminClient, createRequestClient } from "@/lib/supabase/server";
 // Names-only employee directory. Any authenticated employee can call
 // this (middleware already rejects unauthenticated requests) — it backs
 // features like "pick a checker" or "reassign to" that every role needs,
-// without exposing headcount, classification, capacity or any other
+// without exposing headcount, classification or any other
 // field RLS otherwise restricts to admin/manager on GET /api/employees.
-export async function GET() {
+export async function GET(request: Request) {
+  const reviewersOnly = new URL(request.url).searchParams.get("role") === "reviewer";
   try {
     // Confirm the caller has a real session before using the admin
     // client to bypass RLS for this deliberately narrow projection.
@@ -20,10 +21,11 @@ export async function GET() {
     }
 
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("employees")
-      .select("id, name")
-      .order("name");
+    // ?role=reviewer narrows to managers/admins: the people who can open
+    // the Level 2 check page. Still names only.
+    let query = admin.from("employees").select("id, name");
+    if (reviewersOnly) query = query.in("classification", ["manager", "admin"]);
+    const { data, error } = await query.order("name");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getTaxPeriods } from "@/lib/utils";
+
+const TAX_PERIODS = getTaxPeriods();
 
 interface Employee {
   id: number;
@@ -48,7 +51,7 @@ export default function TaskModal({
     division_id: "",
     due_date: "",
     amount: "",
-    tax_period: "25-26",
+    tax_period: TAX_PERIODS[10],
     template_id: "",
   });
 
@@ -56,8 +59,6 @@ export default function TaskModal({
   const [groupedTemplates, setGroupedTemplates] = useState<Record<string, Template[]>>({});
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-
-  const TAX_PERIODS = ["25-26", "24-25", "23-24"];
 
   useEffect(() => {
     if (isOpen) {
@@ -69,7 +70,7 @@ export default function TaskModal({
         division_id: "",
         due_date: "",
         amount: "",
-        tax_period: "25-26",
+        tax_period: TAX_PERIODS[10],
         template_id: "",
       });
       setError("");

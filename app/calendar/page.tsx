@@ -11,6 +11,7 @@ import NavbarRefined from "@/components/NavbarRefined";
 import EventModal, { EditingEvent } from "./components/EventModal";
 import NotesPanel from "./components/NotesPanel";
 import { getCurrentUserFromCookies } from "@/lib/auth";
+import { isTaskOpen } from "@/lib/utils";
 
 interface EventType {
   id: number;
@@ -109,7 +110,7 @@ export default function CalendarPage() {
     }));
 
     const taskMarkers = tasks
-      .filter((t) => t.due_date && t.status !== "done")
+      .filter((t) => t.due_date && isTaskOpen(t.status))
       .map((t) => ({
         id: `task__${t.id}`,
         title: `📋 ${t.title}`,
